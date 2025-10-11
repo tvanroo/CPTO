@@ -1,0 +1,39 @@
+{
+  "name": "cpto",
+  "version": "1.0.0",
+  "description": "Crypto Trading Platform with Ongoing sentiment analysis from Reddit",
+  "main": "build/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.ts",
+    "start": "node build/index.js",
+    "build": "tsc",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "crypto",
+    "trading",
+    "reddit",
+    "sentiment-analysis",
+    "openai",
+    "tokenmetrics"
+  ],
+  "author": "Toby",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "eslint": "^9.37.0",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@types/snoowrap": "^1.16.1",
+    "axios": "^1.12.2",
+    "dotenv": "^17.2.3",
+    "openai": "^6.3.0",
+    "snoowrap": "^1.23.0"
+  }
+}
