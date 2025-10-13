@@ -27,7 +27,7 @@ export class TokenMetricsClient {
       baseURL: this.baseURL,
       timeout: 30000,
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        'x-api-key': this.apiKey,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'User-Agent': 'CPTO/1.0'
