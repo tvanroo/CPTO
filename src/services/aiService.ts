@@ -498,7 +498,11 @@ Consider:
 
       const content = response.choices[0]?.message?.content?.trim();
       console.log('OpenAI API connection successful');
-      return content?.includes('Connection successful') || false;
+      console.log(`Response content: "${content}"`);
+      
+      // If we got a valid response, the connection is working
+      // Don't require exact text match as different models may respond differently
+      return !!(response && response.choices && response.choices[0]);
     } catch (error) {
       console.error('OpenAI API connection failed:', error);
       return false;
