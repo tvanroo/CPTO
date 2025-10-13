@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { config } from '../config';
 import { redditClient } from '../clients/redditClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
+import { geminiClient } from '../clients/geminiClient';
 import { aiService } from './aiService';
 import {
   RedditPost,
@@ -169,7 +170,8 @@ export class TradingBot extends EventEmitter {
     
     const tests = [
       { name: 'OpenAI', test: () => aiService.testConnection() },
-      { name: 'TokenMetrics', test: () => tokenMetricsClient.testConnection() }
+      { name: 'TokenMetrics', test: () => tokenMetricsClient.testConnection() },
+      { name: 'Gemini', test: () => geminiClient.testConnection() }
     ];
 
     for (const { name, test } of tests) {
@@ -333,8 +335,8 @@ export class TradingBot extends EventEmitter {
         return;
       }
 
-      // Get market data
-      const marketData = await tokenMetricsClient.getMarketData(ticker);
+      // Get market data from both sources for comparison
+      const marketData = await this.getMarketData(ticker);
       const marketTrend = await tokenMetricsClient.getMarketTrends(ticker);
 
       // Generate trading decision
@@ -368,7 +370,8 @@ export class TradingBot extends EventEmitter {
         order_type: 'market' // Use market orders for simplicity
       };
 
-      const tradeResult = await tokenMetricsClient.executeTrade(order);
+      // Execute trade using Gemini Exchange
+      const tradeResult = await geminiClient.executeTrade(order);
       
       // Update tracking
       this.recentTrades.set(signal.ticker, Date.now());
@@ -406,6 +409,31 @@ export class TradingBot extends EventEmitter {
           subreddit: sourceItem.subreddit
         }
       });
+    }
+  }
+
+  /**
+   * Get market data with fallback strategy
+   * Primary: Gemini Exchange (real-time trading data)
+   * Fallback: TokenMetrics (broader market data)
+   */
+  private async getMarketData(ticker: string): Promise<any> {
+    try {
+      // Try Gemini first - it has real trading data
+      const geminiData = await geminiClient.getPrice(ticker);
+      console.log(`📊 Market data from Gemini for ${ticker}: $${geminiData.price}`);
+      return geminiData;
+    } catch (error) {
+      console.warn(`Gemini data unavailable for ${ticker}, falling back to TokenMetrics:`, error);
+      try {
+        // Fallback to TokenMetrics
+        const tokenMetricsData = await tokenMetricsClient.getMarketData(ticker);
+        console.log(`📊 Market data from TokenMetrics for ${ticker}: $${tokenMetricsData.price}`);
+        return tokenMetricsData;
+      } catch (fallbackError) {
+        console.error(`Failed to get market data for ${ticker} from both sources`);
+        throw fallbackError;
+      }
     }
   }
 

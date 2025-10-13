@@ -158,6 +158,15 @@ export interface AppConfig {
     baseUrl: string;
   };
   
+  // Gemini Exchange
+  gemini: {
+    apiKey: string;
+    apiSecret: string;
+    baseUrl: string;
+    sandboxUrl: string;
+    useSandbox: boolean;
+  };
+  
   // App settings
   app: {
     nodeEnv: string;
@@ -220,6 +229,13 @@ export class OpenAIAPIError extends CPTOError {
   constructor(message: string, context?: Record<string, any>) {
     super(message, 'OPENAI_API_ERROR', context);
     this.name = 'OpenAIAPIError';
+  }
+}
+
+export class GeminiAPIError extends CPTOError {
+  constructor(message: string, context?: Record<string, any>) {
+    super(message, 'GEMINI_API_ERROR', context);
+    this.name = 'GeminiAPIError';
   }
 }
 

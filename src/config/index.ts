@@ -73,6 +73,15 @@ export function createConfig(): AppConfig {
         baseUrl: getOptionalEnv('TOKENMETRICS_BASE_URL', 'https://api.tokenmetrics.com'),
       },
 
+      // Gemini Exchange Configuration
+      gemini: {
+        apiKey: getRequiredEnv('GEMINI_API_KEY'),
+        apiSecret: getRequiredEnv('GEMINI_API_SECRET'),
+        baseUrl: getOptionalEnv('GEMINI_BASE_URL', 'https://api.gemini.com'),
+        sandboxUrl: getOptionalEnv('GEMINI_SANDBOX_URL', 'https://api.sandbox.gemini.com'),
+        useSandbox: getOptionalEnv('GEMINI_USE_SANDBOX', 'true').toLowerCase() === 'true',
+      },
+
       // Application Configuration
       app: {
         nodeEnv: getOptionalEnv('NODE_ENV', 'development'),
