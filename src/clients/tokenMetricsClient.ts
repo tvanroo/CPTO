@@ -399,9 +399,16 @@ export class TokenMetricsClient {
     }
     
     try {
-      await this.getAPIStatus();
-      console.log('TokenMetrics API connection successful');
-      return true;
+      // Use basic tokens endpoint that should be available on all plans
+      const response: AxiosResponse = await this.client.get('/v2/tokens?limit=1');
+      
+      if (response.status === 200) {
+        console.log('TokenMetrics API connection successful');
+        return true;
+      } else {
+        console.log(`TokenMetrics API returned status: ${response.status}`);
+        return false;
+      }
     } catch (error) {
       console.error('TokenMetrics API connection failed:', error);
       return false;
