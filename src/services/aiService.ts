@@ -29,6 +29,19 @@ export class AIService {
   }
 
   /**
+   * Get model-specific parameters
+   */
+  private getModelParams(): { supportsTemperature: boolean } {
+    // gpt-5-nano and some newer models don't support custom temperature
+    const modelsWithoutCustomTemp = ['gpt-5-nano', 'gpt-4o-mini'];
+    const supportsTemperature = !modelsWithoutCustomTemp.some(model => 
+      this.model.toLowerCase().includes(model.toLowerCase())
+    );
+    
+    return { supportsTemperature };
+  }
+
+  /**
    * Analyze sentiment of Reddit text content
    */
   public async analyzeSentiment(text: string, ticker?: string): Promise<SentimentScore> {
@@ -39,8 +52,9 @@ export class AIService {
     
     try {
       const prompt = this.buildSentimentPrompt(text, ticker);
+      const modelParams = this.getModelParams();
       
-      const response = await this.openai.chat.completions.create({
+      const requestParams: any = {
         model: this.model,
         messages: [
           {
@@ -58,9 +72,15 @@ export class AIService {
             content: prompt
           }
         ],
-        temperature: 0.1, // Low temperature for consistent analysis
         max_completion_tokens: 200,
-      });
+      };
+      
+      // Only add temperature if the model supports it
+      if (modelParams.supportsTemperature) {
+        requestParams.temperature = 0.1; // Low temperature for consistent analysis
+      }
+      
+      const response = await this.openai.chat.completions.create(requestParams);
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) {
@@ -108,8 +128,9 @@ export class AIService {
     
     try {
       const prompt = this.buildTradingDecisionPrompt(sentimentScore, marketData, marketTrend);
+      const modelParams = this.getModelParams();
       
-      const response = await this.openai.chat.completions.create({
+      const requestParams: any = {
         model: this.model,
         messages: [
           {
@@ -137,9 +158,15 @@ Trading Rules:
             content: prompt
           }
         ],
-        temperature: 0.2, // Slightly higher for some creativity in reasoning
         max_completion_tokens: 300,
-      });
+      };
+      
+      // Only add temperature if the model supports it
+      if (modelParams.supportsTemperature) {
+        requestParams.temperature = 0.2; // Slightly higher for some creativity in reasoning
+      }
+      
+      const response = await this.openai.chat.completions.create(requestParams);
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) {
@@ -190,7 +217,9 @@ Trading Rules:
 
 Text: "${text.substring(0, 500)}"`;
 
-      const response = await this.openai.chat.completions.create({
+      const modelParams = this.getModelParams();
+      
+      const requestParams: any = {
         model: this.model,
         messages: [
           {
@@ -202,9 +231,15 @@ Text: "${text.substring(0, 500)}"`;
             content: prompt
           }
         ],
-        temperature: 0.1,
         max_completion_tokens: 100,
-      });
+      };
+      
+      // Only add temperature if the model supports it
+      if (modelParams.supportsTemperature) {
+        requestParams.temperature = 0.1;
+      }
+      
+      const response = await this.openai.chat.completions.create(requestParams);
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) {
@@ -241,7 +276,9 @@ Text: "${text.substring(0, 500)}"`;
 Reddit Content:
 ${combinedText}`;
 
-      const response = await this.openai.chat.completions.create({
+      const modelParams = this.getModelParams();
+      
+      const requestParams: any = {
         model: this.model,
         messages: [
           {
@@ -253,9 +290,15 @@ ${combinedText}`;
             content: prompt
           }
         ],
-        temperature: 0.3,
         max_completion_tokens: 250,
-      });
+      };
+      
+      // Only add temperature if the model supports it
+      if (modelParams.supportsTemperature) {
+        requestParams.temperature = 0.3;
+      }
+      
+      const response = await this.openai.chat.completions.create(requestParams);
 
       return response.choices[0]?.message?.content?.trim() || 'Unable to generate summary';
 
@@ -427,15 +470,23 @@ Consider:
     }
     
     try {
-      const response = await this.openai.chat.completions.create({
+      const modelParams = this.getModelParams();
+      
+      const requestParams: any = {
         model: this.model,
         messages: [
           { role: 'system', content: 'You are a test assistant.' },
           { role: 'user', content: 'Respond with: "Connection successful"' }
         ],
         max_completion_tokens: 10,
-        temperature: 0
-      });
+      };
+      
+      // Only add temperature if the model supports it
+      if (modelParams.supportsTemperature) {
+        requestParams.temperature = 0;
+      }
+      
+      const response = await this.openai.chat.completions.create(requestParams);
 
       const content = response.choices[0]?.message?.content?.trim();
       console.log('OpenAI API connection successful');
