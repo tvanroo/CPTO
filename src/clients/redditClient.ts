@@ -19,6 +19,16 @@ export class RedditClient extends EventEmitter {
    */
   private initializeClient(): void {
     try {
+      // Check if we're in development mode with placeholder credentials
+      const isDev = process.env.SKIP_CONFIG_VALIDATION === 'true' || 
+                   config.reddit.clientId.startsWith('placeholder_');
+      
+      if (isDev) {
+        console.log('⚠️  Running in development mode with mock Reddit client');
+        this.reddit = this.createMockRedditClient();
+        return;
+      }
+      
       this.reddit = new (snoowrap as any)({
         userAgent: config.reddit.userAgent,
         clientId: config.reddit.clientId,
@@ -255,6 +265,62 @@ export class RedditClient extends EventEmitter {
     
     flatten(comments);
     return flattened;
+  }
+
+  /**
+   * Create mock Reddit client for development
+   */
+  private createMockRedditClient(): any {
+    return {
+      config: () => {},
+      getSubreddit: (name: string) => ({
+        getNew: () => Promise.resolve([
+          {
+            id: 'mock_post_1',
+            title: 'Bitcoin to the moon! 🚀',
+            selftext: 'I think BTC will reach $100k soon based on recent trends',
+            author: { name: 'crypto_enthusiast' },
+            subreddit: { display_name: name },
+            score: 150,
+            upvote_ratio: 0.85,
+            created_utc: Date.now() / 1000,
+            url: 'https://reddit.com/mock',
+            num_comments: 25
+          },
+          {
+            id: 'mock_post_2', 
+            title: 'Ethereum gas fees are too high',
+            selftext: 'ETH network congestion is killing DeFi adoption',
+            author: { name: 'defi_user' },
+            subreddit: { display_name: name },
+            score: 89,
+            upvote_ratio: 0.75,
+            created_utc: (Date.now() / 1000) - 300,
+            url: 'https://reddit.com/mock2',
+            num_comments: 42
+          }
+        ])
+      }),
+      getSubmission: (id: string) => ({
+        comments: {
+          fetchMore: () => Promise.resolve([
+            {
+              id: 'mock_comment_1',
+              body: 'Totally agree! BTC is going to explode higher!',
+              author: { name: 'bull_market_fan' },
+              subreddit: { display_name: 'CryptoCurrency' },
+              score: 15,
+              created_utc: Date.now() / 1000,
+              parent_id: id
+            }
+          ])
+        }
+      }),
+      search: () => Promise.resolve([]),
+      getUser: (username: string) => ({
+        fetch: () => Promise.resolve({ name: username })
+      })
+    };
   }
 
   /**

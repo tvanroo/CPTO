@@ -10,6 +10,10 @@ dotenv.config();
 function getRequiredEnv(key: string): string {
   const value = process.env[key];
   if (!value) {
+    if (process.env.NODE_ENV === 'test' || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      console.warn(`Warning: Required environment variable ${key} is not set, using placeholder`);
+      return `placeholder_${key.toLowerCase()}`;
+    }
     throw new Error(`Required environment variable ${key} is not set`);
   }
   return value;
@@ -42,6 +46,11 @@ function getNumericEnv(key: string, defaultValue: number): number {
  */
 export function createConfig(): AppConfig {
   try {
+    // Check if we're in a test environment or missing critical env vars
+    if (process.env.NODE_ENV === 'test' || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      console.log('Skipping strict config validation for test environment');
+    }
+    
     const config: AppConfig = {
       // Reddit API Configuration
       reddit: {
@@ -135,19 +144,33 @@ function validateConfig(config: AppConfig): void {
 }
 
 /**
- * Global configuration instance
+ * Global configuration instance - lazy loaded
  */
-export const config = createConfig();
+let _config: AppConfig | null = null;
+
+export function getConfig(): AppConfig {
+  if (!_config) {
+    _config = createConfig();
+  }
+  return _config;
+}
+
+// For backward compatibility
+export const config = new Proxy({} as AppConfig, {
+  get(_target, prop) {
+    return getConfig()[prop as keyof AppConfig];
+  }
+});
 
 /**
  * Helper to check if running in development mode
  */
-export const isDevelopment = () => config.app.nodeEnv === 'development';
+export const isDevelopment = () => getConfig().app.nodeEnv === 'development';
 
 /**
  * Helper to check if running in production mode
  */
-export const isProduction = () => config.app.nodeEnv === 'production';
+export const isProduction = () => getConfig().app.nodeEnv === 'production';
 
 /**
  * Export types for use in other modules

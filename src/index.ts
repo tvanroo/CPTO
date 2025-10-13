@@ -1,7 +1,19 @@
 #!/usr/bin/env node
 
-import { config, isDevelopment } from './config';
+import { getConfig, isDevelopment } from './config';
 import { tradingBot } from './services/tradingBot';
+
+// Attempt to load configuration with better error handling
+let config: any;
+try {
+  config = getConfig();
+} catch (error) {
+  console.error('❌ Configuration Error:');
+  console.error(error instanceof Error ? error.message : error);
+  console.error('\n💡 Please ensure your .env file is configured correctly.');
+  console.error('   Copy .env.example to .env and add your API keys.\n');
+  process.exit(1);
+}
 
 /**
  * CPTO - Crypto Trading Platform with Ongoing sentiment analysis

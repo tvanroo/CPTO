@@ -4,12 +4,17 @@
   "description": "Crypto Trading Platform with Ongoing sentiment analysis from Reddit",
   "main": "build/index.js",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "SKIP_CONFIG_VALIDATION=true nodemon --exec 'ts-node' src/index.ts",
+    "dev:watch": "nodemon --watch src --exec 'SKIP_CONFIG_VALIDATION=true ts-node' src/index.ts",
     "start": "node build/index.js",
     "build": "tsc",
+    "build:watch": "tsc --watch",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:config": "SKIP_CONFIG_VALIDATION=true node -e \"console.log('Testing config...'); require('./build/config').getConfig(); console.log('✅ Config test passed!');\"",
+    "clean": "rm -rf build",
+    "prepare": "npm run build"
   },
   "keywords": [
     "crypto",

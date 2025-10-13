@@ -11,9 +11,19 @@ export class AIService {
   private model: string;
 
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: config.openai.apiKey,
-    });
+    // Check if we're in development mode
+    const isDev = process.env.SKIP_CONFIG_VALIDATION === 'true' || 
+                 config.openai.apiKey.startsWith('placeholder_');
+    
+    if (isDev) {
+      console.log('⚠️  Running AI Service in development mode with mock responses');
+      this.openai = {} as OpenAI; // Mock OpenAI instance
+    } else {
+      this.openai = new OpenAI({
+        apiKey: config.openai.apiKey,
+      });
+    }
+    
     this.model = config.openai.model;
     console.log(`AI Service initialized with model: ${this.model}`);
   }
@@ -22,6 +32,11 @@ export class AIService {
    * Analyze sentiment of Reddit text content
    */
   public async analyzeSentiment(text: string, ticker?: string): Promise<SentimentScore> {
+    // Return mock sentiment in development mode
+    if (config.openai.apiKey.startsWith('placeholder_') || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      return this.getMockSentiment(text, ticker);
+    }
+    
     try {
       const prompt = this.buildSentimentPrompt(text, ticker);
       
@@ -86,6 +101,11 @@ export class AIService {
     marketData: MarketData,
     marketTrend?: MarketTrend
   ): Promise<TradeSignal> {
+    // Return mock trading decision in development mode
+    if (config.openai.apiKey.startsWith('placeholder_') || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      return this.getMockTradeDecision(sentimentScore, marketData, marketTrend);
+    }
+    
     try {
       const prompt = this.buildTradingDecisionPrompt(sentimentScore, marketData, marketTrend);
       
@@ -160,6 +180,11 @@ Trading Rules:
    * Extract cryptocurrency tickers mentioned in text
    */
   public async extractCryptoTickers(text: string): Promise<string[]> {
+    // Return mock tickers in development mode
+    if (config.openai.apiKey.startsWith('placeholder_') || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      return this.getMockTickers(text);
+    }
+    
     try {
       const prompt = `Analyze this Reddit text and extract all cryptocurrency ticker symbols mentioned (like BTC, ETH, ADA, etc.). Return only a JSON array of ticker symbols in uppercase, no explanations:
 
@@ -314,9 +339,93 @@ Consider:
   }
 
   /**
+   * Generate mock sentiment for development
+   */
+  private getMockSentiment(text: string, ticker?: string): SentimentScore {
+    const words = text.toLowerCase();
+    let score = 0;
+    
+    // Simple keyword-based mock sentiment
+    if (words.includes('moon') || words.includes('bullish') || words.includes('buy')) score += 0.3;
+    if (words.includes('crash') || words.includes('bearish') || words.includes('sell')) score -= 0.3;
+    if (words.includes('hodl') || words.includes('diamond hands')) score += 0.2;
+    if (words.includes('fud') || words.includes('dump')) score -= 0.2;
+    
+    // Add some randomness
+    score += (Math.random() - 0.5) * 0.4;
+    score = Math.max(-1, Math.min(1, score));
+    
+    return {
+      score,
+      magnitude: Math.abs(score),
+      confidence: 0.7 + Math.random() * 0.2,
+      reasoning: `Mock sentiment analysis: detected ${score > 0 ? 'positive' : score < 0 ? 'negative' : 'neutral'} sentiment in text about ${ticker || 'crypto'}`
+    };
+  }
+  
+  /**
+   * Generate mock trade decision for development
+   */
+  private getMockTradeDecision(
+    sentimentScore: SentimentScore,
+    marketData: MarketData,
+    marketTrend?: MarketTrend
+  ): TradeSignal {
+    // Simple mock decision logic
+    let action: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+    let confidence = 0.5;
+    
+    if (sentimentScore.score > 0.5 && sentimentScore.confidence > 0.6) {
+      action = 'BUY';
+      confidence = 0.7;
+    } else if (sentimentScore.score < -0.5 && sentimentScore.confidence > 0.6) {
+      action = 'SELL';
+      confidence = 0.7;
+    }
+    
+    return {
+      action,
+      ticker: marketData.ticker,
+      confidence,
+      amount_usd: config.trading.tradeAmountUsd,
+      reasoning: `Mock trading decision: ${action} based on sentiment ${sentimentScore.score.toFixed(2)} and market data`,
+      sentiment_score: sentimentScore.score,
+      market_score: marketTrend?.confidence || 0.5,
+      timestamp: Date.now()
+    };
+  }
+  
+  /**
+   * Generate mock crypto tickers for development
+   */
+  private getMockTickers(text: string): string[] {
+    const commonTickers = ['BTC', 'ETH', 'ADA', 'DOT', 'LINK', 'UNI', 'MATIC'];
+    const words = text.toUpperCase();
+    const foundTickers: string[] = [];
+    
+    // Simple pattern matching for common terms
+    if (words.includes('BITCOIN') || words.includes('BTC')) foundTickers.push('BTC');
+    if (words.includes('ETHEREUM') || words.includes('ETH')) foundTickers.push('ETH');
+    if (words.includes('CARDANO') || words.includes('ADA')) foundTickers.push('ADA');
+    
+    // If no specific matches, return a random ticker
+    if (foundTickers.length === 0 && Math.random() > 0.3) {
+      foundTickers.push(commonTickers[Math.floor(Math.random() * commonTickers.length)]);
+    }
+    
+    return foundTickers;
+  }
+
+  /**
    * Test OpenAI connection
    */
   public async testConnection(): Promise<boolean> {
+    // Always return true in development mode
+    if (config.openai.apiKey.startsWith('placeholder_') || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      console.log('🎭 OpenAI API connection successful (mock mode)');
+      return true;
+    }
+    
     try {
       const response = await this.openai.chat.completions.create({
         model: this.model,
