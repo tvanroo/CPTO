@@ -15,11 +15,36 @@ echo "🟢 Installing Node.js 18.x..."
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
+# Reload shell environment
+source ~/.bashrc || true
+export PATH="/usr/bin:/usr/local/bin:$PATH"
+
+# Wait a moment for installation to complete
+sleep 2
+
 # Verify Node.js installation
-node_version=$(node --version)
-npm_version=$(npm --version)
-echo "✅ Node.js installed: $node_version"
-echo "✅ npm installed: $npm_version"
+if command -v node &> /dev/null; then
+    node_version=$(node --version)
+    echo "✅ Node.js installed: $node_version"
+else
+    echo "❌ Node.js installation failed"
+    exit 1
+fi
+
+if command -v npm &> /dev/null; then
+    npm_version=$(npm --version)
+    echo "✅ npm installed: $npm_version"
+else
+    echo "❌ npm not found, trying to install manually..."
+    sudo apt-get install -y npm
+    if command -v npm &> /dev/null; then
+        npm_version=$(npm --version)
+        echo "✅ npm installed: $npm_version"
+    else
+        echo "❌ npm installation failed"
+        exit 1
+    fi
+fi
 
 # Install PM2 globally
 echo "⚙️  Installing PM2 globally..."
