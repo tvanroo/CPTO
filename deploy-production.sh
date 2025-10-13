@@ -63,13 +63,32 @@ fi
 
 # Start with PM2 in production mode (in background as per user preference)
 echo "🚀 Starting CPTO with PM2 in background..."
-pm2 start ecosystem.config.js --env production &
+
+# Try different PM2 commands
+if command -v pm2 &> /dev/null; then
+    echo "Using global PM2..."
+    pm2 start ecosystem.config.js --env production &
+elif command -v npx &> /dev/null; then
+    echo "Using npx PM2..."
+    npx pm2 start ecosystem.config.js --env production &
+else
+    echo "❌ PM2 not found. Please install PM2 first:"
+    echo "Run: ./fix-pm2.sh"
+    exit 1
+fi
 
 # Wait a moment for the process to start
 sleep 5
 
-# Check if the process is running
-if pm2 list | grep -q "online.*cpto"; then
+# Check if the process is running (try different PM2 commands)
+PM2_CMD=""
+if command -v pm2 &> /dev/null; then
+    PM2_CMD="pm2"
+elif command -v npx &> /dev/null; then
+    PM2_CMD="npx pm2"
+fi
+
+if [ -n "$PM2_CMD" ] && $PM2_CMD list | grep -q "online.*cpto"; then
     echo "✅ CPTO is now running in production mode!"
     
     # Configure PM2 for auto-startup
