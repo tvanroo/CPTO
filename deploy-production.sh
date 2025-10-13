@@ -93,25 +93,40 @@ if [ -n "$PM2_CMD" ] && $PM2_CMD list | grep -q "online.*cpto"; then
     
     # Configure PM2 for auto-startup
     echo "⚙️  Configuring PM2 auto-startup..."
-    sudo env PATH=$PATH:/usr/bin $(which pm2) startup systemd -u $USER --hp $HOME
-    pm2 save
+    if command -v pm2 &> /dev/null; then
+        sudo env PATH=$PATH:/usr/bin $(which pm2) startup systemd -u $USER --hp $HOME
+        pm2 save
+    else
+        echo "Note: PM2 auto-startup requires global PM2 installation"
+        echo "You can manually restart with: npx pm2 start ecosystem.config.js --env production"
+    fi
     
     echo "✅ PM2 auto-startup configured"
 else
     echo "❌ Failed to start CPTO. Check PM2 logs:"
-    pm2 logs cpto --lines 20
+    if [ -n "$PM2_CMD" ]; then
+        $PM2_CMD logs cpto --lines 20
+    fi
     exit 1
 fi
 
 echo ""
 echo "🎉 CPTO deployment completed successfully!"
 echo ""
-echo "📊 Monitoring commands:"
-echo "  pm2 status          # Check process status"
-echo "  pm2 logs cpto       # View live logs"
-echo "  pm2 monit          # Real-time monitoring dashboard"
-echo "  pm2 restart cpto   # Restart the application"
-echo "  pm2 stop cpto      # Stop the application"
+echo "📈 Monitoring commands:"
+if command -v pm2 &> /dev/null; then
+    echo "  pm2 status          # Check process status"
+    echo "  pm2 logs cpto       # View live logs"
+    echo "  pm2 monit          # Real-time monitoring dashboard"
+    echo "  pm2 restart cpto   # Restart the application"
+    echo "  pm2 stop cpto      # Stop the application"
+else
+    echo "  npx pm2 status          # Check process status"
+    echo "  npx pm2 logs cpto       # View live logs"
+    echo "  npx pm2 monit          # Real-time monitoring dashboard"
+    echo "  npx pm2 restart cpto   # Restart the application"
+    echo "  npx pm2 stop cpto      # Stop the application"
+fi
 echo ""
 echo "📝 Log files are located in:"
 echo "  ./logs/cpto-error.log    # Error logs"
