@@ -59,7 +59,7 @@ export class AIService {
           }
         ],
         temperature: 0.1, // Low temperature for consistent analysis
-        max_tokens: 200,
+        max_completion_tokens: 200,
       });
 
       const content = response.choices[0]?.message?.content?.trim();
@@ -138,7 +138,7 @@ Trading Rules:
           }
         ],
         temperature: 0.2, // Slightly higher for some creativity in reasoning
-        max_tokens: 300,
+        max_completion_tokens: 300,
       });
 
       const content = response.choices[0]?.message?.content?.trim();
@@ -203,7 +203,7 @@ Text: "${text.substring(0, 500)}"`;
           }
         ],
         temperature: 0.1,
-        max_tokens: 100,
+        max_completion_tokens: 100,
       });
 
       const content = response.choices[0]?.message?.content?.trim();
@@ -254,7 +254,7 @@ ${combinedText}`;
           }
         ],
         temperature: 0.3,
-        max_tokens: 250,
+        max_completion_tokens: 250,
       });
 
       return response.choices[0]?.message?.content?.trim() || 'Unable to generate summary';
@@ -433,7 +433,7 @@ Consider:
           { role: 'system', content: 'You are a test assistant.' },
           { role: 'user', content: 'Respond with: "Connection successful"' }
         ],
-        max_tokens: 10,
+        max_completion_tokens: 10,
         temperature: 0
       });
 
