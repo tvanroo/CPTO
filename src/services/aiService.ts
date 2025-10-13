@@ -32,12 +32,20 @@ export class AIService {
    * Get model-specific parameters
    */
   private getModelParams(): { supportsTemperature: boolean } {
-    // gpt-5-nano and some newer models don't support custom temperature
-    const modelsWithoutCustomTemp = ['gpt-5-nano', 'gpt-4o-mini'];
+    // These models don't support custom temperature values - they only accept default (1)
+    const modelsWithoutCustomTemp = [
+      'gpt-5-nano',    // OpenAI gpt-5-nano
+      'gpt-4o-mini',   // OpenAI gpt-4o-mini
+      'o4-mini',       // OpenAI o4-mini (alternative naming)
+      'o1-mini',       // OpenAI o1-mini series
+      'o1-preview'     // OpenAI o1-preview series
+    ];
+    
     const supportsTemperature = !modelsWithoutCustomTemp.some(model => 
       this.model.toLowerCase().includes(model.toLowerCase())
     );
     
+    console.log(`Model ${this.model} temperature support: ${supportsTemperature}`);
     return { supportsTemperature };
   }
 
