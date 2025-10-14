@@ -66,6 +66,9 @@ export class TradingBot extends EventEmitter {
       // Test all connections first
       await this.testConnections();
       
+      // Process recent Reddit posts from the last hour for initial data
+      await this.processRecentRedditHistory();
+      
       // Start Reddit streaming
       await redditClient.startStreaming();
       
@@ -500,6 +503,85 @@ export class TradingBot extends EventEmitter {
    */
   public getStats(): TradingStats {
     return { ...this.stats };
+  }
+
+  /**
+   * Process recent Reddit posts from the last hour for initial data
+   * This provides content to analyze immediately on startup
+   */
+  private async processRecentRedditHistory(): Promise<void> {
+    console.log('🕰️ Processing recent Reddit posts from the last hour...');
+    
+    const oneHourAgo = Math.floor(Date.now() / 1000) - (60 * 60); // 1 hour ago in Unix timestamp
+    let totalItemsFound = 0;
+    let totalItemsQueued = 0;
+    
+    try {
+      for (const subreddit of config.trading.subreddits) {
+        console.log(`🔍 Fetching recent posts from r/${subreddit}...`);
+        
+        try {
+          // Get recent posts from the last few hours (more than 1 hour to ensure we get enough data)
+          const posts = await redditClient.getRecentPosts(subreddit, 50);
+          
+          // Filter posts to only those from the last hour
+          const recentPosts = posts.filter(post => post.created_utc >= oneHourAgo);
+          totalItemsFound += recentPosts.length;
+          
+          console.log(`Found ${recentPosts.length} recent posts from r/${subreddit}`);
+          
+          // Add posts to processing queue
+          for (const post of recentPosts) {
+            this.addToQueue(post);
+            totalItemsQueued++;
+            
+            // Also try to get recent comments for each post
+            try {
+              if (post.num_comments > 0) {
+                const comments = await redditClient.getPostComments(post.id, 10);
+                const recentComments = comments.filter(comment => comment.created_utc >= oneHourAgo);
+                
+                for (const comment of recentComments) {
+                  this.addToQueue(comment);
+                  totalItemsQueued++;
+                }
+                
+                if (recentComments.length > 0) {
+                  console.log(`Added ${recentComments.length} recent comments from post ${post.id}`);
+                }
+              }
+            } catch (commentError) {
+              console.warn(`Failed to fetch comments for post ${post.id}:`, commentError);
+            }
+          }
+          
+          // Add a small delay between subreddits to respect rate limits
+          if (subreddit !== config.trading.subreddits[config.trading.subreddits.length - 1]) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          
+        } catch (subredditError) {
+          console.warn(`Failed to fetch recent posts from r/${subreddit}:`, subredditError);
+        }
+      }
+      
+      console.log(`✅ Historical processing complete: Found ${totalItemsFound} recent items, queued ${totalItemsQueued} for processing`);
+      
+      if (totalItemsQueued > 0) {
+        this.emit('historyProcessed', {
+          itemsFound: totalItemsFound,
+          itemsQueued: totalItemsQueued,
+          subreddits: config.trading.subreddits
+        });
+      } else {
+        console.log('💭 No recent Reddit activity found in the last hour');
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to process recent Reddit history:', error);
+      this.recordError('history_processing', error as Error);
+      // Don't throw - this is not critical for bot startup
+    }
   }
 }
 

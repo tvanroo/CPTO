@@ -189,6 +189,40 @@ export class GeminiClient {
    * Get account balances
    */
   public async getAccountBalances(): Promise<any> {
+    // Return mock data in development mode
+    if (this.apiKey.startsWith('placeholder_') || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      return [
+        {
+          currency: 'USD',
+          amount: '2500.75',
+          available: '2500.75',
+          availableForWithdrawal: '2500.75',
+          type: 'exchange'
+        },
+        {
+          currency: 'BTC',
+          amount: '0.05432100',
+          available: '0.05432100',
+          availableForWithdrawal: '0.05432100',
+          type: 'exchange'
+        },
+        {
+          currency: 'ETH',
+          amount: '0.87654321',
+          available: '0.87654321',
+          availableForWithdrawal: '0.87654321',
+          type: 'exchange'
+        },
+        {
+          currency: 'LTC',
+          amount: '5.12345678',
+          available: '5.12345678',
+          availableForWithdrawal: '5.12345678',
+          type: 'exchange'
+        }
+      ];
+    }
+    
     try {
       const nonce = Date.now();
       const payload = {
@@ -210,6 +244,50 @@ export class GeminiClient {
    * Get trading history
    */
   public async getTradingHistory(symbol?: string, limit: number = 50): Promise<TradeResult[]> {
+    // Return mock data in development mode
+    if (this.apiKey.startsWith('placeholder_') || process.env.SKIP_CONFIG_VALIDATION === 'true') {
+      const mockTrades = [
+        {
+          order_id: 'mock_trade_1',
+          ticker: 'BTC',
+          side: 'buy' as const,
+          amount_usd: 1000.00,
+          executed_price: 45000.00,
+          fees: 3.50,
+          status: 'completed' as const,
+          timestamp: Date.now() - (60 * 60 * 1000) // 1 hour ago
+        },
+        {
+          order_id: 'mock_trade_2',
+          ticker: 'ETH',
+          side: 'buy' as const,
+          amount_usd: 500.00,
+          executed_price: 2800.00,
+          fees: 1.75,
+          status: 'completed' as const,
+          timestamp: Date.now() - (2 * 60 * 60 * 1000) // 2 hours ago
+        },
+        {
+          order_id: 'mock_trade_3',
+          ticker: 'BTC',
+          side: 'sell' as const,
+          amount_usd: 750.00,
+          executed_price: 46000.00,
+          fees: 2.63,
+          status: 'completed' as const,
+          timestamp: Date.now() - (4 * 60 * 60 * 1000) // 4 hours ago
+        }
+      ];
+      
+      // Filter by symbol if specified
+      let filteredTrades = symbol ? 
+        mockTrades.filter(trade => trade.ticker.toLowerCase() === symbol.toLowerCase()) : 
+        mockTrades;
+      
+      // Apply limit
+      return filteredTrades.slice(0, limit);
+    }
+    
     try {
       const nonce = Date.now();
       const payload: any = {

@@ -39,23 +39,16 @@ export class WebServer {
     this.setupMiddleware();
     this.setupRoutes();
     this.setupSocketHandlers();
+    this.setupTradingBotListeners();
   }
 
   /**
    * Setup Express middleware
    */
   private setupMiddleware(): void {
-    // Security
+    // Security - Disable CSP for development
     this.app.use(helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://cdn.socket.io"],
-          imgSrc: ["'self'", "data:", "https:"],
-          connectSrc: ["'self'", "ws:", "wss:"],
-        },
-      },
+      contentSecurityPolicy: false, // Disable CSP entirely
     }));
 
     // CORS
@@ -253,6 +246,102 @@ export class WebServer {
       });
     });
 
+    // Portfolio management
+    this.app.get('/api/portfolio/balance', async (_req, res) => {
+      try {
+        const balances = await geminiClient.getAccountBalances();
+        
+        // Calculate total USD value and format response
+        let totalUsdValue = 0;
+        const formattedBalances = [];
+        
+        for (const balance of balances) {
+          const symbol = balance.currency;
+          const available = parseFloat(balance.available);
+          const availableForWithdrawal = parseFloat(balance.availableForWithdrawal || '0');
+          
+          if (available > 0) {
+            let usdValue = 0;
+            
+            // Get USD value for non-USD currencies
+            if (symbol !== 'USD') {
+              try {
+                const marketData = await geminiClient.getPrice(`${symbol}USD`);
+                usdValue = available * marketData.price;
+              } catch (priceError) {
+                // If we can't get price data, still include the balance but with 0 USD value
+                console.warn(`Could not get price for ${symbol}:`, priceError);
+              }
+            } else {
+              usdValue = available;
+            }
+            
+            totalUsdValue += usdValue;
+            
+            formattedBalances.push({
+              currency: symbol,
+              available: available,
+              availableForWithdrawal: availableForWithdrawal,
+              usdValue: usdValue,
+              formattedValue: `$${usdValue.toFixed(2)}`
+            });
+          }
+        }
+        
+        // Sort by USD value descending
+        formattedBalances.sort((a, b) => b.usdValue - a.usdValue);
+        
+        const portfolioData = {
+          totalUsdValue: totalUsdValue,
+          formattedTotal: `$${totalUsdValue.toFixed(2)}`,
+          balances: formattedBalances,
+          timestamp: new Date().toISOString(),
+          exchangeMode: config.gemini.useSandbox ? 'sandbox' : 'production'
+        };
+        
+        res.json(portfolioData);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ 
+          error: errorMessage, 
+          totalUsdValue: 0, 
+          formattedTotal: '$0.00',
+          balances: [] 
+        });
+      }
+    });
+    
+    // Trading history
+    this.app.get('/api/portfolio/trades', async (req, res) => {
+      try {
+        const limit = parseInt(req.query.limit as string) || 20;
+        const symbol = req.query.symbol as string;
+        
+        const trades = await geminiClient.getTradingHistory(symbol, limit);
+        
+        const formattedTrades = trades.map(trade => ({
+          ...trade,
+          formattedAmount: `$${trade.amount_usd.toFixed(2)}`,
+          formattedPrice: `$${trade.executed_price.toFixed(2)}`,
+          formattedFees: `$${trade.fees.toFixed(2)}`,
+          formattedDate: new Date(trade.timestamp).toLocaleString()
+        }));
+        
+        res.json({
+          trades: formattedTrades,
+          count: formattedTrades.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ 
+          error: errorMessage, 
+          trades: [], 
+          count: 0 
+        });
+      }
+    });
+
     // System info
     this.app.get('/api/system', (_req, res) => {
       exec('df -h / && free -h && uptime', (_error, stdout, _stderr) => {
@@ -423,6 +512,64 @@ export class WebServer {
     if (lowerLine.includes('success') || lowerLine.includes('✅') || lowerLine.includes('started')) return 'success';
     if (lowerLine.includes('info') || lowerLine.includes('🔍') || lowerLine.includes('📊')) return 'info';
     return 'info';
+  }
+
+  /**
+   * Setup trading bot event listeners for real-time updates
+   */
+  private setupTradingBotListeners(): void {
+    // Listen for bot events and broadcast to connected clients
+    tradingBot.on('botStarted', () => {
+      this.io.emit('botStatusUpdate', { status: 'started', message: 'Bot started' });
+    });
+    
+    tradingBot.on('botStopped', () => {
+      this.io.emit('botStatusUpdate', { status: 'stopped', message: 'Bot stopped' });
+    });
+    
+    tradingBot.on('historyProcessed', (data) => {
+      this.io.emit('historyProcessed', {
+        message: `Processed ${data.itemsQueued} Reddit items from ${data.subreddits.join(', ')}`,
+        data: data
+      });
+    });
+    
+    tradingBot.on('queueUpdated', (data) => {
+      this.io.emit('queueUpdate', {
+        queueSize: data.size,
+        newItem: {
+          id: data.item.id,
+          subreddit: data.item.subreddit,
+          author: data.item.author
+        }
+      });
+    });
+    
+    tradingBot.on('tradeExecuted', (data) => {
+      this.io.emit('tradeExecuted', {
+        ticker: data.signal.ticker,
+        action: data.signal.action,
+        amount: data.signal.amount_usd,
+        price: data.result.executed_price,
+        status: data.result.status,
+        source: data.sourceItem.subreddit
+      });
+      
+      // Also send notification
+      this.io.emit('notification', {
+        type: data.result.status === 'completed' ? 'success' : 'warning',
+        message: `${data.signal.action.toUpperCase()} ${data.signal.ticker} for $${data.signal.amount_usd} - ${data.result.status}`
+      });
+    });
+    
+    tradingBot.on('processingError', (error) => {
+      this.io.emit('notification', {
+        type: 'error',
+        message: `Processing error: ${error.message}`
+      });
+    });
+    
+    console.log('✅ Trading bot event listeners setup complete');
   }
 
   /**
