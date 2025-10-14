@@ -422,7 +422,7 @@ export class TradingBot extends EventEmitter {
     sentiment: any, 
     marketData: any, 
     marketTrend: any, 
-    content: string
+    _content: string
   ): Promise<void> {
     const isManualMode = config.trading.tradingMode === 'manual';
     
