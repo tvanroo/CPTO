@@ -4,13 +4,15 @@ import { redditClient } from '../clients/redditClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { geminiClient } from '../clients/geminiClient';
 import { aiService } from './aiService';
+import { pendingTradesManager } from './pendingTradesManager';
 import {
   RedditPost,
   RedditComment,
   RedditItem,
   TradeSignal,
   TradeOrder,
-  CPTOError
+  CPTOError,
+  PendingTrade
 } from '../types';
 
 interface ProcessingQueue {
@@ -49,6 +51,7 @@ export class TradingBot extends EventEmitter {
     this.stats = {} as TradingStats; // Initialize before calling methods
     this.initializeStats();
     this.setupEventHandlers();
+    this.setupPendingTradeListeners();
   }
 
   /**
@@ -162,6 +165,57 @@ export class TradingBot extends EventEmitter {
       console.error('Reddit streaming error:', error);
       this.recordError('reddit_stream', error);
       this.emit('processingError', error);
+    });
+  }
+
+  /**
+   * Set up event handlers for pending trades manager
+   */
+  private setupPendingTradeListeners(): void {
+    // Listen for approved trades and execute them
+    pendingTradesManager.on('tradeApproved', async (pendingTrade: PendingTrade) => {
+      try {
+        console.log(`✅ Executing approved trade: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker}`);
+        
+        // Create a mock source item from the pending trade data
+        const sourceItem: RedditItem = {
+          id: pendingTrade.sourceItem.id,
+          author: pendingTrade.sourceItem.author,
+          subreddit: pendingTrade.sourceItem.subreddit,
+          created_utc: Math.floor(pendingTrade.createdAt / 1000)
+        } as RedditItem;
+        
+        await this.executeTrade(pendingTrade.signal, sourceItem);
+        
+      } catch (error) {
+        console.error(`Failed to execute approved trade ${pendingTrade.id}:`, error);
+        this.recordError('approved_trade_execution', error as Error);
+        
+        this.emit('approvedTradeError', {
+          pendingTrade,
+          error
+        });
+      }
+    });
+
+    // Listen for rejected trades
+    pendingTradesManager.on('tradeRejected', (pendingTrade: PendingTrade) => {
+      console.log(`❌ Trade rejected: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker} (ID: ${pendingTrade.id})`);
+      
+      this.emit('tradeRejected', {
+        pendingTrade,
+        signal: pendingTrade.signal
+      });
+    });
+
+    // Listen for expired trades
+    pendingTradesManager.on('tradeExpired', (pendingTrade: PendingTrade) => {
+      console.log(`⏰ Trade expired: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker} (ID: ${pendingTrade.id})`);
+      
+      this.emit('tradeExpired', {
+        pendingTrade,
+        signal: pendingTrade.signal
+      });
     });
   }
 
@@ -350,7 +404,7 @@ export class TradingBot extends EventEmitter {
 
       // Execute trade if conditions are met
       if (tradeSignal.action !== 'HOLD' && tradeSignal.confidence > 0.6) {
-        await this.executeTrade(tradeSignal, item);
+        await this.handleTradeDecision(tradeSignal, item, sentiment, marketData, marketTrend, content);
       }
 
     } catch (error) {
@@ -360,7 +414,60 @@ export class TradingBot extends EventEmitter {
   }
 
   /**
-   * Execute a trade based on the signal
+   * Handle trade decision based on trading mode (manual vs autopilot)
+   */
+  private async handleTradeDecision(
+    signal: TradeSignal, 
+    sourceItem: RedditItem, 
+    sentiment: any, 
+    marketData: any, 
+    marketTrend: any, 
+    content: string
+  ): Promise<void> {
+    const isManualMode = config.trading.tradingMode === 'manual';
+    
+    if (isManualMode) {
+      // Add to pending trades for manual approval
+      try {
+        const pendingTrade = await pendingTradesManager.addPendingTrade(
+          signal,
+          {
+            id: sourceItem.id,
+            subreddit: sourceItem.subreddit,
+            author: sourceItem.author,
+            content: this.extractContent(sourceItem)
+          },
+          marketData,
+          marketTrend,
+          sentiment
+        );
+
+        console.log(`📋 Trade proposal added for manual approval: ${signal.action.toUpperCase()} ${signal.ticker} (ID: ${pendingTrade.id})`);
+        
+        // Emit event for dashboard notification
+        this.emit('tradePendingApproval', {
+          pendingTrade,
+          signal,
+          sourceItem: {
+            id: sourceItem.id,
+            subreddit: sourceItem.subreddit,
+            author: sourceItem.author
+          }
+        });
+        
+      } catch (error) {
+        console.error(`Failed to add pending trade for ${signal.ticker}:`, error);
+        this.recordError('pending_trade', error as Error);
+      }
+    } else {
+      // Autopilot mode - execute immediately
+      console.log(`🚀 Autopilot mode: Executing trade immediately`);
+      await this.executeTrade(signal, sourceItem);
+    }
+  }
+
+  /**
+   * Execute a trade based on the signal (called from autopilot mode or manual approval)
    */
   private async executeTrade(signal: TradeSignal, sourceItem: RedditItem): Promise<void> {
     try {

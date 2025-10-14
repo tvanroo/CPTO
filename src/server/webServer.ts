@@ -13,6 +13,7 @@ import { tradingBot } from '../services/tradingBot';
 import { geminiClient } from '../clients/geminiClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { aiService } from '../services/aiService';
+import { pendingTradesManager } from '../services/pendingTradesManager';
 
 /**
  * Web server for CPTO Dashboard
@@ -342,6 +343,176 @@ export class WebServer {
       }
     });
 
+    // Pending trades management
+    this.app.get('/api/trades/pending', (_req, res) => {
+      try {
+        const pendingTrades = pendingTradesManager.getPendingTrades();
+        const statistics = pendingTradesManager.getStatistics();
+        
+        res.json({
+          trades: pendingTrades,
+          statistics,
+          tradingMode: config.trading.tradingMode,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.get('/api/trades/all', (_req, res) => {
+      try {
+        const allTrades = pendingTradesManager.getAllTrades();
+        const statistics = pendingTradesManager.getStatistics();
+        
+        res.json({
+          trades: allTrades,
+          statistics,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/trades/:tradeId/approve', async (req, res) => {
+      const { tradeId } = req.params;
+      const { reason } = req.body;
+      
+      try {
+        const approvedTrade = await pendingTradesManager.processTradeApproval({
+          tradeId,
+          action: 'approve',
+          reason,
+          userId: 'dashboard-user' // Could be extended with real user auth
+        });
+        
+        if (approvedTrade) {
+          this.io.emit('tradeApproved', {
+            trade: approvedTrade,
+            message: `Trade ${tradeId} approved for execution`
+          });
+          
+          res.json({
+            success: true,
+            message: `Trade ${tradeId} approved for execution`,
+            trade: approvedTrade
+          });
+        } else {
+          res.status(404).json({ error: 'Trade not found' });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(400).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/trades/:tradeId/reject', async (req, res) => {
+      const { tradeId } = req.params;
+      const { reason } = req.body;
+      
+      try {
+        const rejectedTrade = await pendingTradesManager.processTradeApproval({
+          tradeId,
+          action: 'reject',
+          reason,
+          userId: 'dashboard-user'
+        });
+        
+        if (rejectedTrade) {
+          this.io.emit('tradeRejected', {
+            trade: rejectedTrade,
+            message: `Trade ${tradeId} rejected`
+          });
+          
+          res.json({
+            success: true,
+            message: `Trade ${tradeId} rejected`,
+            trade: rejectedTrade
+          });
+        } else {
+          res.status(404).json({ error: 'Trade not found' });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(400).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/trades/bulk/:action', async (req, res) => {
+      const { action } = req.params;
+      const { tradeIds, reason } = req.body;
+      
+      if (!['approve', 'reject'].includes(action)) {
+        return res.status(400).json({ error: 'Invalid action. Must be approve or reject' });
+      }
+      
+      if (!Array.isArray(tradeIds) || tradeIds.length === 0) {
+        return res.status(400).json({ error: 'tradeIds must be a non-empty array' });
+      }
+      
+      try {
+        const result = await pendingTradesManager.bulkProcessTrades(
+          tradeIds,
+          action as 'approve' | 'reject',
+          reason
+        );
+        
+        this.io.emit('bulkTradeProcessed', {
+          action,
+          processed: result.processed.length,
+          errors: result.errors.length,
+          message: `Bulk ${action}: ${result.processed.length} processed, ${result.errors.length} errors`
+        });
+        
+        res.json({
+          success: true,
+          message: `Bulk ${action} completed`,
+          processed: result.processed.length,
+          errors: result.errors.length,
+          details: result
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.get('/api/trades/statistics', (_req, res) => {
+      try {
+        const statistics = pendingTradesManager.getStatistics();
+        
+        res.json({
+          ...statistics,
+          tradingMode: config.trading.tradingMode,
+          expiryHours: config.trading.pendingTradeExpiryHours,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/trading/mode', (req, res) => {
+      const { mode } = req.body;
+      
+      if (!['manual', 'autopilot'].includes(mode)) {
+        return res.status(400).json({ error: 'Invalid trading mode. Must be manual or autopilot' });
+      }
+      
+      // Note: In a production system, you'd want to update the config file or environment
+      // For now, we'll just inform the user that a restart is needed
+      res.json({
+        success: true,
+        message: `Trading mode change to '${mode}' requested. Update TRADING_MODE environment variable and restart the application.`,
+        currentMode: config.trading.tradingMode,
+        requestedMode: mode
+      });
+    });
+
     // System info
     this.app.get('/api/system', (_req, res) => {
       exec('df -h / && free -h && uptime', (_error, stdout, _stderr) => {
@@ -569,7 +740,41 @@ export class WebServer {
       });
     });
     
-    console.log('✅ Trading bot event listeners setup complete');
+    // Listen for pending trade events
+    pendingTradesManager.on('newPendingTrade', (pendingTrade) => {
+      this.io.emit('newPendingTrade', {
+        trade: pendingTrade,
+        message: `New trade pending approval: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker}`
+      });
+      
+      this.io.emit('notification', {
+        type: 'info',
+        message: `📋 New trade awaiting approval: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker} ($${pendingTrade.signal.amount_usd})`
+      });
+    });
+    
+    pendingTradesManager.on('tradeApprovalProcessed', (data) => {
+      const { pendingTrade, approval } = data;
+      this.io.emit('tradeApprovalProcessed', {
+        trade: pendingTrade,
+        approval,
+        message: `Trade ${approval.action}: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker}`
+      });
+    });
+    
+    pendingTradesManager.on('tradeExpired', (pendingTrade) => {
+      this.io.emit('tradeExpired', {
+        trade: pendingTrade,
+        message: `Trade expired: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker}`
+      });
+      
+      this.io.emit('notification', {
+        type: 'warning',
+        message: `⏰ Trade expired: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker}`
+      });
+    });
+    
+    console.log('✅ Trading bot and pending trades event listeners setup complete');
   }
 
   /**

@@ -90,6 +90,41 @@ export interface TradeResult {
   timestamp: number;
 }
 
+/**
+ * Trading modes for bot operation
+ */
+export type TradingMode = 'manual' | 'autopilot';
+
+/**
+ * Pending trade awaiting manual approval
+ */
+export interface PendingTrade {
+  id: string;
+  signal: TradeSignal;
+  sourceItem: {
+    id: string;
+    subreddit: string;
+    author: string;
+    content: string;
+  };
+  marketData: any;
+  marketTrend: any;
+  sentiment: SentimentScore;
+  createdAt: number;
+  expiresAt: number;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+}
+
+/**
+ * Trade approval action
+ */
+export interface TradeApproval {
+  tradeId: string;
+  action: 'approve' | 'reject';
+  reason?: string;
+  userId?: string;
+}
+
 // Database types
 export interface DatabaseRedditItem {
   id: string;
@@ -180,6 +215,8 @@ export interface AppConfig {
     sentimentThreshold: number;
     tradeAmountUsd: number;
     maxTradesPerHour: number;
+    tradingMode: TradingMode;
+    pendingTradeExpiryHours: number;
   };
   
   // Database

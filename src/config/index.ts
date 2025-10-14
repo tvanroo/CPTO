@@ -98,6 +98,8 @@ export function createConfig(): AppConfig {
         sentimentThreshold: getNumericEnv('SENTIMENT_THRESHOLD', 0.6),
         tradeAmountUsd: getNumericEnv('TRADE_AMOUNT_USD', 100),
         maxTradesPerHour: getNumericEnv('MAX_TRADES_PER_HOUR', 5),
+        tradingMode: (getOptionalEnv('TRADING_MODE', 'manual') as 'manual' | 'autopilot'),
+        pendingTradeExpiryHours: getNumericEnv('PENDING_TRADE_EXPIRY_HOURS', 2),
       },
 
       // Database Configuration
