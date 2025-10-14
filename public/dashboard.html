@@ -1737,6 +1737,10 @@
                 calls.forEach(call => {
                     const date = new Date(call.timestamp).toLocaleString();
                     const purposeDisplay = call.purpose.charAt(0).toUpperCase() + call.purpose.slice(1).replace(/_/g, ' ');
+                    const cost = call.cost_usd || 0;
+                    const totalTokens = call.usage ? call.usage.total_tokens : 0;
+                    const promptTokens = call.usage ? call.usage.prompt_tokens : 0;
+                    const completionTokens = call.usage ? call.usage.completion_tokens : 0;
                     
                     callsHTML += `
                         <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: #f9f9f9;">
@@ -1746,14 +1750,13 @@
                                     <small style="color: #7f8c8d;">${date}</small>
                                 </div>
                                 <div style="text-align: right;">
-                                    <div style="color: #27ae60; font-weight: bold;">$${call.cost.toFixed(6)}</div>
-                                    <div style="font-size: 0.8em; color: #7f8c8d;">${call.tokens} tokens</div>
+                                    <div style="color: #27ae60; font-weight: bold;">$${cost.toFixed(6)}</div>
+                                    <div style="font-size: 0.8em; color: #7f8c8d;">${totalTokens} tokens</div>
                                 </div>
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 0.8em; color: #7f8c8d;">
-                                <div><strong>Input:</strong> ${call.promptTokens} tokens</div>
-                                <div><strong>Output:</strong> ${call.completionTokens} tokens</div>
-                                <div><strong>Duration:</strong> ${(call.responseTime / 1000).toFixed(2)}s</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 0.8em; color: #7f8c8d;">
+                                <div><strong>Input:</strong> ${promptTokens} tokens</div>
+                                <div><strong>Output:</strong> ${completionTokens} tokens</div>
                             </div>
                         </div>
                     `;
