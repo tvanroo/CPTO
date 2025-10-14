@@ -81,6 +81,7 @@ export class DataStorageService {
       });
 
       await this.createTables();
+      await this.runMigrations();
       console.log(`📊 Data Storage Service initialized: ${this.dbPath}`);
     } catch (error) {
       console.error('Failed to initialize data storage service:', error);
@@ -117,6 +118,9 @@ export class DataStorageService {
         -- Trade Decision (optional)
         trade_signal TEXT, -- JSON object
         trade_reasoning TEXT,
+        
+        -- Cost optimization tracking
+        reuse_count INTEGER NOT NULL DEFAULT 0,
         
         -- Indexes for efficient querying
         UNIQUE(reddit_id)
@@ -174,6 +178,25 @@ export class DataStorageService {
   }
 
   /**
+   * Run database migrations to update schema
+   */
+  private async runMigrations(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Check if reuse_count column exists, if not add it
+    const tableInfo = await this.db.all(`PRAGMA table_info(processed_content)`);
+    const hasReuseCount = tableInfo.some((col: any) => col.name === 'reuse_count');
+    
+    if (!hasReuseCount) {
+      await this.db.exec(`
+        ALTER TABLE processed_content 
+        ADD COLUMN reuse_count INTEGER NOT NULL DEFAULT 0;
+      `);
+      console.log('✅ Added reuse_count column to processed_content table');
+    }
+  }
+
+  /**
    * Store processed Reddit content with AI analysis
    */
   async storeProcessedContent(content: ProcessedContent): Promise<void> {
@@ -183,8 +206,8 @@ export class DataStorageService {
       INSERT OR REPLACE INTO processed_content (
         id, reddit_id, subreddit, author, title, content, url, created_utc, type,
         sentiment_score, sentiment_reasoning, extracted_tickers, confidence_level,
-        processing_timestamp, trade_signal, trade_reasoning
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        processing_timestamp, trade_signal, trade_reasoning, reuse_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       content.id,
       content.reddit_id,
@@ -201,7 +224,8 @@ export class DataStorageService {
       content.confidence_level,
       content.processing_timestamp,
       content.trade_signal ? JSON.stringify(content.trade_signal) : null,
-      content.trade_reasoning
+      content.trade_reasoning,
+      0 // initial reuse_count
     ]);
 
     // Update currency watchlist for any extracted tickers

@@ -74,6 +74,7 @@ run_remote "cd $SERVER_PATH && npm install"
 echo "4️⃣ Building TypeScript code..."
 run_remote "cd $SERVER_PATH && npm run build"
 
+# Run database migration after build
 echo "4.5️⃣ Running database migration..."
 run_remote "cd $SERVER_PATH && node migrate-db.js"
 
