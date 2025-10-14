@@ -10,17 +10,31 @@ function generateId(): string {
  * Prices in USD per 1K tokens
  */
 const OPENAI_PRICING: Record<string, { input: number; output: number }> = {
+  // GPT-4 models
   'gpt-4': { input: 0.03, output: 0.06 },
   'gpt-4-turbo': { input: 0.01, output: 0.03 },
   'gpt-4-turbo-preview': { input: 0.01, output: 0.03 },
   'gpt-4-1106-preview': { input: 0.01, output: 0.03 },
   'gpt-4-0125-preview': { input: 0.01, output: 0.03 },
+  'gpt-4o': { input: 0.005, output: 0.015 },
+  'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
+  'gpt-4o-mini-2024-07-18': { input: 0.00015, output: 0.0006 },
+  
+  // GPT-3.5 models
   'gpt-3.5-turbo': { input: 0.0015, output: 0.002 },
   'gpt-3.5-turbo-1106': { input: 0.001, output: 0.002 },
   'gpt-3.5-turbo-0125': { input: 0.0005, output: 0.0015 },
+  
+  // O1 models
   'o1-preview': { input: 0.015, output: 0.06 },
   'o1-mini': { input: 0.003, output: 0.012 },
-  'o4-mini': { input: 0.003, output: 0.012 }, // Assuming same as o1-mini
+  'o1-mini-2024-09-12': { input: 0.003, output: 0.012 },
+  
+  // Legacy model aliases
+  'o4-mini': { input: 0.003, output: 0.012 }, // Legacy alias for o1-mini
+  'gpt-5-nano': { input: 0.00015, output: 0.0006 }, // Likely alias for gpt-4o-mini
+  
+  // Embedding models
   'text-embedding-3-small': { input: 0.00002, output: 0 },
   'text-embedding-3-large': { input: 0.00013, output: 0 },
   'text-embedding-ada-002': { input: 0.0001, output: 0 }
