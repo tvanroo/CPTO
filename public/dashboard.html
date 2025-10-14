@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPTO Trading Bot Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            padding: 15px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 5px;
+            font-size: 2em;
+        }
+
+        .header .subtitle {
+            color: #7f8c8d;
+            font-size: 1.1em;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.3em;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        .status-online {
+            background: #27ae60;
+        }
+
+        .status-offline {
+            background: #e74c3c;
+        }
+
+        .status-loading {
+            background: #f39c12;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #27ae60, #229954);
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+
+        .btn-warning {
+            background: linear-gradient(45deg, #f39c12, #e67e22);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .control-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .logs-container {
+            background: #2c3e50;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 15px;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logs-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 15px;
+            color: #ecf0f1;
+        }
+
+        .logs-header h3 {
+            color: #ecf0f1;
+            margin: 0;
+        }
+
+        .logs-content {
+            flex: 1;
+            background: #34495e;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 4px;
+            border-left: 3px solid transparent;
+        }
+
+        .log-error {
+            color: #e74c3c;
+            border-left-color: #e74c3c;
+            background: rgba(231, 76, 60, 0.1);
+        }
+
+        .log-warn {
+            color: #f39c12;
+            border-left-color: #f39c12;
+            background: rgba(243, 156, 18, 0.1);
+        }
+
+        .log-success {
+            color: #27ae60;
+            border-left-color: #27ae60;
+            background: rgba(39, 174, 96, 0.1);
+        }
+
+        .log-info {
+            color: #3498db;
+            border-left-color: #3498db;
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .log-timestamp {
+            color: #95a5a6;
+            font-size: 12px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .api-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .api-name {
+            font-weight: 600;
+        }
+
+        .mode-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+            margin-left: 10px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #27ae60;
+        }
+
+        .notification.error {
+            background: #e74c3c;
+        }
+
+        .notification.info {
+            background: #3498db;
+        }
+        
+        .portfolio-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        
+        .total-balance {
+            text-align: left;
+        }
+        
+        .balance-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #27ae60;
+            margin-bottom: 5px;
+        }
+        
+        .balance-label {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        
+        .mode-badge {
+            background: #3498db;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .mode-badge.sandbox {
+            background: #f39c12;
+        }
+        
+        .mode-badge.production {
+            background: #27ae60;
+        }
+        
+        .balance-breakdown {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+        
+        .balance-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .balance-currency {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .balance-amount {
+            text-align: right;
+        }
+        
+        .balance-crypto {
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        
+        .balance-usd {
+            font-weight: 600;
+            color: #27ae60;
+        }
+        
+        .loading-text {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            padding: 20px;
+        }
+        
+        .trade-history {
+            margin-top: 20px;
+        }
+        
+        .trade-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        
+        .trade-buy {
+            border-left: 3px solid #27ae60;
+        }
+        
+        .trade-sell {
+            border-left: 3px solid #e74c3c;
+        }
+        
+        .pending-trade {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #f39c12;
+        }
+        
+        .pending-trade.buy {
+            border-left-color: #27ae60;
+        }
+        
+        .pending-trade.sell {
+            border-left-color: #e74c3c;
+        }
+        
+        .pending-trade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .pending-trade-title {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        
+        .pending-trade-amount {
+            background: #3498db;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+        
+        .pending-trade-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        
+        .pending-trade-detail {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .pending-trade-detail strong {
+            color: #2c3e50;
+        }
+        
+        .pending-trade-source {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: #7f8c8d;
+            margin-bottom: 10px;
+        }
+        
+        .pending-trade-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .pending-trade .btn {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            min-width: 70px;
+        }
+        
+        .trade-timer {
+            font-size: 0.8em;
+            color: #e67e22;
+            font-weight: 600;
+        }
+        
+        .trading-mode-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .trading-mode-indicator.manual {
+            background: #e67e22;
+            color: white;
+        }
+        
+        .trading-mode-indicator.autopilot {
+            background: #27ae60;
+            color: white;
+        }
+        
+        #pending-trades-card[data-mode="autopilot"] {
+            opacity: 0.6;
+        }
+        
+        #pending-trades-card[data-mode="autopilot"] h3::after {
+            content: " (Disabled in Autopilot)";
+            font-size: 0.8em;
+            color: #7f8c8d;
+            font-weight: normal;
+        }
+        
+        .cost-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .cost-breakdown {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .breakdown-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .breakdown-section h4 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 1em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+        }
+        
+        .breakdown-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .breakdown-item:last-child {
+            border-bottom: none;
+        }
+        
+        .breakdown-label {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        
+        .breakdown-cost {
+            color: #27ae60;
+            font-weight: 600;
+        }
+        
+        .breakdown-meta {
+            font-size: 0.8em;
+            color: #7f8c8d;
+            margin-left: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .cost-breakdown {
+                grid-template-columns: 1fr;
+            }
+            .dashboard {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .control-buttons {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1><i class="fas fa-robot"></i> CPTO Trading Bot</h1>
+            <p class="subtitle">Cryptocurrency Trading Platform with Ongoing Analysis</p>
+        </div>
+
+        <div class="status-grid">
+            <div class="card">
+                <h3><i class="fas fa-cog"></i> Bot Status</h3>
+                <div class="api-status">
+                    <span class="api-name">Trading Bot</span>
+                    <span class="status-indicator" id="bot-status"></span>
+                </div>
+                <div id="bot-info">
+                    <p><strong>Status:</strong> <span id="bot-status-text">Loading...</span></p>
+                    <p><strong>Uptime:</strong> <span id="bot-uptime">-</span></p>
+                    <p><strong>Queue Size:</strong> <span id="queue-size">-</span></p>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn btn-success" onclick="controlBot('start')">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                    <button class="btn btn-danger" onclick="controlBot('stop')">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                    <button class="btn btn-warning" onclick="controlBot('restart')">
+                        <i class="fas fa-redo"></i> Restart
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fas fa-plug"></i> API Connections</h3>
+                <div class="api-status">
+                    <span class="api-name">OpenAI</span>
+                    <span class="status-indicator" id="openai-status"></span>
+                </div>
+                <div class="api-status">
+                    <span class="api-name">TokenMetrics</span>
+                    <span class="status-indicator" id="tokenmetrics-status"></span>
+                </div>
+                <div class="api-status">
+                    <span class="api-name">Gemini Exchange</span>
+                    <span class="status-indicator" id="gemini-status"></span>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="testAPI('all')">
+                        <i class="fas fa-check-circle"></i> Test All
+                    </button>
+                    <button class="btn" onclick="testAPI('openai')">
+                        <i class="fas fa-brain"></i> OpenAI
+                    </button>
+                    <button class="btn" onclick="testAPI('gemini')">
+                        <i class="fas fa-coins"></i> Gemini
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fas fa-chart-line"></i> Trading Stats</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="total-trades">-</div>
+                        <div class="stat-label">Total Trades</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="successful-trades">-</div>
+                        <div class="stat-label">Successful</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="items-processed">-</div>
+                        <div class="stat-label">Items Processed</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="success-rate">-</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3><i class="fas fa-dollar-sign"></i> OpenAI Costs</h3>
+                <div class="cost-toggle">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="cost-period-toggle" onchange="toggleCostPeriod()">
+                        <span class="slider"></span>
+                    </label>
+                    <span id="cost-period-text">Last 24 Hours</span>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="total-cost">$0.00</div>
+                        <div class="stat-label">Total Cost</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="total-calls">0</div>
+                        <div class="stat-label">API Calls</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="total-tokens">0</div>
+                        <div class="stat-label">Total Tokens</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="avg-cost-per-call">$0.00</div>
+                        <div class="stat-label">Avg Per Call</div>
+                    </div>
+                </div>
+                <div class="cost-breakdown" id="cost-breakdown">
+                    <div class="breakdown-section">
+                        <h4>By Model</h4>
+                        <div id="model-breakdown">No data available</div>
+                    </div>
+                    <div class="breakdown-section">
+                        <h4>By Purpose</h4>
+                        <div id="purpose-breakdown">No data available</div>
+                    </div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadCostData()">
+                        <i class="fas fa-sync"></i> Refresh Costs
+                    </button>
+                    <button class="btn" onclick="viewRecentCalls()">
+                        <i class="fas fa-list"></i> Recent Calls
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fas fa-wallet"></i> Portfolio Balance</h3>
+                <div class="portfolio-summary">
+                    <div class="total-balance">
+                        <div class="balance-value" id="total-portfolio-value">$0.00</div>
+                        <div class="balance-label">Total Portfolio Value</div>
+                    </div>
+                    <div class="exchange-mode">
+                        <span class="mode-badge" id="exchange-mode-badge">Loading...</span>
+                    </div>
+                </div>
+                <div class="balance-breakdown" id="balance-breakdown">
+                    <div class="loading-text">Loading balances...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadPortfolioBalance()">
+                        <i class="fas fa-sync"></i> Refresh Balance
+                    </button>
+                    <button class="btn" onclick="loadTradingHistory()">
+                        <i class="fas fa-history"></i> Recent Trades
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3><i class="fas fa-wrench"></i> Configuration</h3>
+                <div class="mode-toggle">
+                    <span>Trading Mode:</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="trading-mode-toggle" onchange="toggleTradingMode()">
+                        <span class="slider"></span>
+                    </label>
+                    <span id="trading-mode-text">Manual</span>
+                </div>
+                <div class="mode-toggle" style="margin-top: 10px;">
+                    <span>Gemini Mode:</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="sandbox-toggle" onchange="toggleSandboxMode()">
+                        <span class="slider"></span>
+                    </label>
+                    <span id="mode-text">Production</span>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadConfig()">
+                        <i class="fas fa-sync"></i> Refresh Config
+                    </button>
+                    <button class="btn btn-warning" onclick="pm2Action('restart')">
+                        <i class="fas fa-server"></i> PM2 Restart
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card" id="pending-trades-card">
+                <h3><i class="fas fa-clock"></i> Pending Trades</h3>
+                <div class="trade-mode-info">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="pending-count">0</div>
+                            <div class="stat-label">Pending</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="approved-count">0</div>
+                            <div class="stat-label">Approved Today</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="rejected-count">0</div>
+                            <div class="stat-label">Rejected Today</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="pending-trades-list">
+                    <div class="loading-text">No pending trades</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadPendingTrades()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-success" onclick="bulkApproveTrades()" id="bulk-approve-btn" disabled>
+                        <i class="fas fa-check-double"></i> Approve All
+                    </button>
+                    <button class="btn btn-danger" onclick="bulkRejectTrades()" id="bulk-reject-btn" disabled>
+                        <i class="fas fa-times-circle"></i> Reject All
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="logs-container">
+            <div class="logs-header">
+                <h3><i class="fas fa-terminal"></i> Live Logs</h3>
+                <div>
+                    <button class="btn" onclick="toggleLogStreaming()">
+                        <i class="fas fa-play" id="log-toggle-icon"></i>
+                        <span id="log-toggle-text">Start Streaming</span>
+                    </button>
+                    <button class="btn" onclick="clearLogs()">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                </div>
+            </div>
+            <div class="logs-content" id="logs-content">
+                <div class="log-entry log-info">
+                    <span class="log-timestamp">[System]</span> 
+                    Dashboard loaded. Click "Start Streaming" to view live logs.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        // Socket.IO connection - Force HTTP with polling only
+        const protocol = 'http:';
+        const host = window.location.hostname;
+        const port = '4000'; // Hard-coded port
+        const socketUrl = `${protocol}//${host}:${port}`;
+        
+        console.log('Connecting to Socket.IO at:', socketUrl);
+        
+        const socket = io(socketUrl, {
+            transports: ['polling'], // Only use polling, no WebSocket
+            forceNew: true,
+            reconnection: true,
+            timeout: 10000,
+            secure: false,
+            rejectUnauthorized: false,
+            upgrade: false // Prevent upgrading to WebSocket
+        });
+        let isLogStreaming = false;
+
+        // DOM elements
+        const logsContent = document.getElementById('logs-content');
+        const botStatusIndicator = document.getElementById('bot-status');
+        const botStatusText = document.getElementById('bot-status-text');
+
+        // Connect to server
+        socket.on('connect', () => {
+            console.log('Connected to CPTO Dashboard');
+            showNotification('Connected to dashboard', 'success');
+            loadInitialData();
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from dashboard');
+            showNotification('Disconnected from dashboard', 'error');
+        });
+
+        // Bot status updates
+        socket.on('botStatusUpdate', (status) => {
+            updateBotStatus(status);
+        });
+
+        // Log streaming
+        socket.on('logUpdate', (log) => {
+            if (isLogStreaming) {
+                addLogEntry(log);
+            }
+        });
+        
+        // Real-time trading bot events
+        socket.on('historyProcessed', (data) => {
+            showNotification(data.message, 'info');
+            addLogEntry({
+                level: 'info',
+                message: `📚 ${data.message}`,
+                timestamp: new Date().toISOString()
+            });
+        });
+        
+        socket.on('queueUpdate', (data) => {
+            document.getElementById('queue-size').textContent = data.queueSize;
+            
+            // Add subtle log entry for queue updates (only every 10 updates to avoid spam)
+            if (data.queueSize % 10 === 0) {
+                addLogEntry({
+                    level: 'info',
+                    message: `📝 Queue updated: ${data.queueSize} items (New: r/${data.newItem.subreddit})`,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+        
+        socket.on('tradeExecuted', (data) => {
+            const message = `🚀 Trade: ${data.action.toUpperCase()} ${data.ticker} @ $${data.price.toFixed(2)} (${data.status})`;
+            showNotification(message, data.status === 'completed' ? 'success' : 'warning');
+            
+            addLogEntry({
+                level: data.status === 'completed' ? 'success' : 'warn',
+                message: `${message} - Source: r/${data.source}`,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Refresh portfolio balance after trade
+            setTimeout(() => loadPortfolioBalance(), 2000);
+        });
+        
+        socket.on('notification', (data) => {
+            showNotification(data.message, data.type);
+        });
+        
+        // Real-time pending trades events
+        socket.on('newPendingTrade', (data) => {
+            showNotification(data.message, 'info');
+            loadPendingTrades(); // Refresh pending trades list
+        });
+        
+        socket.on('tradeApproved', (data) => {
+            showNotification(data.message, 'success');
+            loadPendingTrades(); // Refresh pending trades list
+        });
+        
+        socket.on('tradeRejected', (data) => {
+            showNotification(data.message, 'warning');
+            loadPendingTrades(); // Refresh pending trades list
+        });
+        
+        socket.on('tradeExpired', (data) => {
+            showNotification(data.message, 'warning');
+            loadPendingTrades(); // Refresh pending trades list
+        });
+        
+        socket.on('bulkTradeProcessed', (data) => {
+            showNotification(data.message, 'info');
+            loadPendingTrades(); // Refresh pending trades list
+        });
+
+        // Initial data loading
+        function loadInitialData() {
+            loadConfig();
+            testAPI('all');
+            controlBot('status');
+            loadPortfolioBalance();
+            loadPendingTrades();
+            loadCostData();
+        }
+
+        // Bot control functions
+        async function controlBot(action) {
+            try {
+                const response = await fetch(`/api/bot/${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showNotification(`Bot ${action} successful`, 'success');
+                    updateBotStatus(result);
+                } else {
+                    throw new Error(result.error || 'Unknown error');
+                }
+            } catch (error) {
+                console.error(`Bot ${action} failed:`, error);
+                showNotification(`Bot ${action} failed: ${error.message}`, 'error');
+            }
+        }
+
+        // API testing functions
+        async function testAPI(service) {
+            const indicators = {
+                openai: document.getElementById('openai-status'),
+                tokenmetrics: document.getElementById('tokenmetrics-status'),
+                gemini: document.getElementById('gemini-status')
+            };
+
+            // Set loading state
+            if (service === 'all') {
+                Object.values(indicators).forEach(indicator => {
+                    indicator.className = 'status-indicator status-loading';
+                });
+            } else if (indicators[service]) {
+                indicators[service].className = 'status-indicator status-loading';
+            }
+
+            try {
+                const response = await fetch(`/api/test/${service}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+
+                if (service === 'all') {
+                    // Handle all services
+                    Object.keys(result).forEach(serviceName => {
+                        const indicator = indicators[serviceName];
+                        if (indicator) {
+                            indicator.className = `status-indicator ${result[serviceName].connected ? 'status-online' : 'status-offline'}`;
+                        }
+                    });
+                    showNotification('API connections tested', 'info');
+                } else {
+                    // Handle single service
+                    const indicator = indicators[service];
+                    if (indicator) {
+                        indicator.className = `status-indicator ${result.connected ? 'status-online' : 'status-offline'}`;
+                    }
+                    showNotification(`${result.service || service} connection: ${result.connected ? 'Success' : 'Failed'}`, 
+                                   result.connected ? 'success' : 'error');
+                }
+            } catch (error) {
+                console.error(`API test failed:`, error);
+                showNotification(`API test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Configuration functions
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                // Update sandbox toggle
+                const sandboxToggle = document.getElementById('sandbox-toggle');
+                const modeText = document.getElementById('mode-text');
+                
+                sandboxToggle.checked = config.gemini.useSandbox;
+                modeText.textContent = config.gemini.useSandbox ? 'Sandbox' : 'Production';
+                
+                console.log('Config loaded:', config);
+            } catch (error) {
+                console.error('Failed to load config:', error);
+                showNotification('Failed to load configuration', 'error');
+            }
+        }
+
+        function toggleSandboxMode() {
+            const sandboxToggle = document.getElementById('sandbox-toggle');
+            const modeText = document.getElementById('mode-text');
+            
+            modeText.textContent = sandboxToggle.checked ? 'Sandbox' : 'Production';
+            
+            showNotification(`Switched to ${sandboxToggle.checked ? 'Sandbox' : 'Production'} mode`, 'info');
+            // Note: This would need backend implementation to actually change the config
+        }
+
+        // PM2 management
+        async function pm2Action(action) {
+            try {
+                const response = await fetch(`/api/pm2/${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showNotification(`PM2 ${action} successful`, 'success');
+                } else {
+                    throw new Error(result.error || 'Unknown error');
+                }
+            } catch (error) {
+                console.error(`PM2 ${action} failed:`, error);
+                showNotification(`PM2 ${action} failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Log streaming functions
+        function toggleLogStreaming() {
+            const toggleButton = document.getElementById('log-toggle-text');
+            const toggleIcon = document.getElementById('log-toggle-icon');
+            
+            if (isLogStreaming) {
+                socket.emit('stopLogStreaming');
+                isLogStreaming = false;
+                toggleButton.textContent = 'Start Streaming';
+                toggleIcon.className = 'fas fa-play';
+                showNotification('Log streaming stopped', 'info');
+            } else {
+                socket.emit('startLogStreaming');
+                isLogStreaming = true;
+                toggleButton.textContent = 'Stop Streaming';
+                toggleIcon.className = 'fas fa-pause';
+                showNotification('Log streaming started', 'info');
+            }
+        }
+
+        function clearLogs() {
+            logsContent.innerHTML = '<div class="log-entry log-info"><span class="log-timestamp">[System]</span> Logs cleared</div>';
+        }
+
+        function addLogEntry(log) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${log.level}`;
+            
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}${log.source ? ` - ${log.source}` : ''}]</span> ${log.message}`;
+            
+            logsContent.appendChild(logEntry);
+            logsContent.scrollTop = logsContent.scrollHeight;
+            
+            // Keep only last 1000 log entries
+            const entries = logsContent.getElementsByClassName('log-entry');
+            if (entries.length > 1000) {
+                logsContent.removeChild(entries[0]);
+            }
+        }
+
+        // Status update functions
+        function updateBotStatus(status) {
+            if (status.isRunning !== undefined) {
+                botStatusIndicator.className = `status-indicator ${status.isRunning ? 'status-online' : 'status-offline'}`;
+                botStatusText.textContent = status.isRunning ? 'Running' : 'Stopped';
+                
+                if (status.stats) {
+                    document.getElementById('total-trades').textContent = status.stats.totalTradesExecuted || 0;
+                    document.getElementById('successful-trades').textContent = status.stats.successfulTrades || 0;
+                    document.getElementById('items-processed').textContent = status.stats.totalItemsProcessed || 0;
+                    
+                    const successRate = status.stats.totalTradesExecuted > 0 ? 
+                        Math.round((status.stats.successfulTrades / status.stats.totalTradesExecuted) * 100) : 0;
+                    document.getElementById('success-rate').textContent = successRate + '%';
+                }
+                
+                document.getElementById('queue-size').textContent = status.queueSize || 0;
+                
+                if (status.stats && status.stats.startTime) {
+                    const uptime = Math.floor((Date.now() - status.stats.startTime) / 1000);
+                    document.getElementById('bot-uptime').textContent = formatUptime(uptime);
+                }
+            }
+        }
+
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours}h ${minutes}m ${secs}s`;
+        }
+
+        // Notification system
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 4000);
+        }
+
+        // Portfolio management functions
+        async function loadPortfolioBalance() {
+            try {
+                const balanceBreakdown = document.getElementById('balance-breakdown');
+                const totalValueElement = document.getElementById('total-portfolio-value');
+                const exchangeModeBadge = document.getElementById('exchange-mode-badge');
+                
+                // Show loading state
+                balanceBreakdown.innerHTML = '<div class="loading-text">Loading balances...</div>';
+                totalValueElement.textContent = '$0.00';
+                exchangeModeBadge.textContent = 'Loading...';
+                
+                const response = await fetch('/api/portfolio/balance');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Update total value
+                    totalValueElement.textContent = data.formattedTotal;
+                    
+                    // Update exchange mode badge
+                    exchangeModeBadge.textContent = data.exchangeMode;
+                    exchangeModeBadge.className = `mode-badge ${data.exchangeMode}`;
+                    
+                    // Update balance breakdown
+                    if (data.balances && data.balances.length > 0) {
+                        let balanceHTML = '';
+                        data.balances.forEach(balance => {
+                            balanceHTML += `
+                                <div class="balance-item">
+                                    <div class="balance-currency">${balance.currency}</div>
+                                    <div class="balance-amount">
+                                        <div class="balance-crypto">${balance.available.toFixed(8)} ${balance.currency}</div>
+                                        <div class="balance-usd">${balance.formattedValue}</div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        balanceBreakdown.innerHTML = balanceHTML;
+                    } else {
+                        balanceBreakdown.innerHTML = '<div class="loading-text">No balances found</div>';
+                    }
+                    
+                    showNotification('Portfolio balance updated', 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to load portfolio balance');
+                }
+            } catch (error) {
+                console.error('Failed to load portfolio balance:', error);
+                document.getElementById('balance-breakdown').innerHTML = 
+                    '<div class="loading-text">Error loading balances</div>';
+                document.getElementById('total-portfolio-value').textContent = '$0.00';
+                showNotification('Failed to load portfolio balance', 'error');
+            }
+        }
+        
+        async function loadTradingHistory() {
+            try {
+                const response = await fetch('/api/portfolio/trades?limit=10');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Create or update trade history modal/section
+                    showTradeHistoryModal(data.trades);
+                    showNotification(`Loaded ${data.count} recent trades`, 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to load trading history');
+                }
+            } catch (error) {
+                console.error('Failed to load trading history:', error);
+                showNotification('Failed to load trading history', 'error');
+            }
+        }
+        
+        function showTradeHistoryModal(trades) {
+            // Create modal if it doesn't exist
+            let modal = document.getElementById('trade-history-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'trade-history-modal';
+                modal.innerHTML = `
+                    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: center; justify-content: center;">
+                        <div style="background: white; border-radius: 15px; padding: 25px; max-width: 800px; max-height: 80vh; overflow-y: auto; margin: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <h3 style="margin: 0; color: #2c3e50;"><i class="fas fa-history"></i> Recent Trading History</h3>
+                                <button onclick="closeTradeHistoryModal()" style="background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 50%; cursor: pointer; font-size: 16px;">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div id="trade-history-content"></div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            // Update content
+            const content = document.getElementById('trade-history-content');
+            if (trades && trades.length > 0) {
+                let tradesHTML = '';
+                trades.forEach(trade => {
+                    const sideClass = trade.side === 'buy' ? 'trade-buy' : 'trade-sell';
+                    tradesHTML += `
+                        <div class="trade-item ${sideClass}" style="padding: 15px; margin-bottom: 10px; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${trade.side.toUpperCase()} ${trade.ticker}</strong><br>
+                                    <small style="color: #7f8c8d;">${trade.formattedDate}</small>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div>${trade.formattedAmount}</div>
+                                    <div style="font-size: 0.9em; color: #7f8c8d;">@ ${trade.formattedPrice}</div>
+                                    <div style="font-size: 0.8em; color: #e74c3c;">Fee: ${trade.formattedFees}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                content.innerHTML = tradesHTML;
+            } else {
+                content.innerHTML = '<div style="text-align: center; color: #7f8c8d; padding: 20px;">No recent trades found</div>';
+            }
+            
+            // Show modal
+            modal.style.display = 'flex';
+        }
+        
+        function closeTradeHistoryModal() {
+            const modal = document.getElementById('trade-history-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Close modals when clicking outside
+        document.addEventListener('click', (e) => {
+            const tradeHistoryModal = document.getElementById('trade-history-modal');
+            if (tradeHistoryModal && e.target === tradeHistoryModal) {
+                closeTradeHistoryModal();
+            }
+            
+            const recentCallsModal = document.getElementById('recent-calls-modal');
+            if (recentCallsModal && e.target === recentCallsModal) {
+                closeRecentCallsModal();
+            }
+        });
+
+        // Pending trades management functions
+        async function loadPendingTrades() {
+            try {
+                const response = await fetch('/api/trades/pending');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updatePendingTradesDisplay(data.trades, data.statistics, data.tradingMode);
+                    showNotification('Pending trades updated', 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to load pending trades');
+                }
+            } catch (error) {
+                console.error('Failed to load pending trades:', error);
+                showNotification('Failed to load pending trades', 'error');
+            }
+        }
+        
+        function updatePendingTradesDisplay(trades, statistics, tradingMode) {
+            // Update statistics
+            document.getElementById('pending-count').textContent = statistics.pending || 0;
+            document.getElementById('approved-count').textContent = statistics.approved || 0;
+            document.getElementById('rejected-count').textContent = statistics.rejected || 0;
+            
+            // Update trading mode display
+            const pendingTradesCard = document.getElementById('pending-trades-card');
+            pendingTradesCard.setAttribute('data-mode', tradingMode);
+            
+            // Update trades list
+            const tradesList = document.getElementById('pending-trades-list');
+            
+            if (trades && trades.length > 0) {
+                let tradesHTML = '';
+                trades.forEach(trade => {
+                    const timeLeft = getTimeLeft(trade.expiresAt);
+                    const side = trade.signal.action.toLowerCase();
+                    
+                    tradesHTML += `
+                        <div class="pending-trade ${side}" data-trade-id="${trade.id}">
+                            <div class="pending-trade-header">
+                                <div class="pending-trade-title">
+                                    ${trade.signal.action.toUpperCase()} ${trade.signal.ticker}
+                                </div>
+                                <div class="pending-trade-amount">
+                                    $${trade.signal.amount_usd.toFixed(2)}
+                                </div>
+                            </div>
+                            <div class="pending-trade-details">
+                                <div class="pending-trade-detail">
+                                    <span><strong>Confidence:</strong></span>
+                                    <span>${(trade.signal.confidence * 100).toFixed(1)}%</span>
+                                </div>
+                                <div class="pending-trade-detail">
+                                    <span><strong>Sentiment:</strong></span>
+                                    <span>${trade.sentiment.score.toFixed(2)}</span>
+                                </div>
+                                <div class="pending-trade-detail">
+                                    <span><strong>Time Left:</strong></span>
+                                    <span class="trade-timer">${timeLeft}</span>
+                                </div>
+                                <div class="pending-trade-detail">
+                                    <span><strong>Source:</strong></span>
+                                    <span>r/${trade.sourceItem.subreddit}</span>
+                                </div>
+                            </div>
+                            <div class="pending-trade-source">
+                                <strong>Reasoning:</strong> ${trade.signal.reasoning || 'No reasoning provided'}
+                            </div>
+                            <div class="pending-trade-actions">
+                                <button class="btn btn-success" onclick="approveTrade('${trade.id}')">
+                                    <i class="fas fa-check"></i> Approve
+                                </button>
+                                <button class="btn btn-danger" onclick="rejectTrade('${trade.id}')">
+                                    <i class="fas fa-times"></i> Reject
+                                </button>
+                                <button class="btn" onclick="viewTradeDetails('${trade.id}')">
+                                    <i class="fas fa-info-circle"></i> Details
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                tradesList.innerHTML = tradesHTML;
+                
+                // Enable bulk action buttons
+                document.getElementById('bulk-approve-btn').disabled = false;
+                document.getElementById('bulk-reject-btn').disabled = false;
+            } else {
+                tradesList.innerHTML = tradingMode === 'manual' ? 
+                    '<div class="loading-text">No pending trades</div>' :
+                    '<div class="loading-text">Autopilot mode - trades execute automatically</div>';
+                    
+                // Disable bulk action buttons
+                document.getElementById('bulk-approve-btn').disabled = true;
+                document.getElementById('bulk-reject-btn').disabled = true;
+            }
+        }
+        
+        async function approveTrade(tradeId) {
+            try {
+                const response = await fetch(`/api/trades/${tradeId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: 'Manual approval via dashboard' })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    showNotification(`Trade approved: ${result.trade.signal.ticker}`, 'success');
+                    loadPendingTrades(); // Refresh the list
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                console.error('Failed to approve trade:', error);
+                showNotification(`Failed to approve trade: ${error.message}`, 'error');
+            }
+        }
+        
+        async function rejectTrade(tradeId) {
+            try {
+                const response = await fetch(`/api/trades/${tradeId}/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: 'Manual rejection via dashboard' })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    showNotification(`Trade rejected: ${result.trade.signal.ticker}`, 'success');
+                    loadPendingTrades(); // Refresh the list
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                console.error('Failed to reject trade:', error);
+                showNotification(`Failed to reject trade: ${error.message}`, 'error');
+            }
+        }
+        
+        async function bulkApproveTrades() {
+            const tradeIds = Array.from(document.querySelectorAll('.pending-trade')).map(el => el.dataset.tradeId);
+            if (tradeIds.length === 0) return;
+            
+            if (!confirm(`Approve all ${tradeIds.length} pending trades?`)) return;
+            
+            try {
+                const response = await fetch('/api/trades/bulk/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        tradeIds, 
+                        reason: 'Bulk approval via dashboard' 
+                    })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    showNotification(`Bulk approval: ${result.processed} processed, ${result.errors} errors`, 'success');
+                    loadPendingTrades(); // Refresh the list
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                console.error('Failed to bulk approve trades:', error);
+                showNotification(`Failed to bulk approve: ${error.message}`, 'error');
+            }
+        }
+        
+        async function bulkRejectTrades() {
+            const tradeIds = Array.from(document.querySelectorAll('.pending-trade')).map(el => el.dataset.tradeId);
+            if (tradeIds.length === 0) return;
+            
+            if (!confirm(`Reject all ${tradeIds.length} pending trades?`)) return;
+            
+            try {
+                const response = await fetch('/api/trades/bulk/reject', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        tradeIds, 
+                        reason: 'Bulk rejection via dashboard' 
+                    })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    showNotification(`Bulk rejection: ${result.processed} processed, ${result.errors} errors`, 'success');
+                    loadPendingTrades(); // Refresh the list
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                console.error('Failed to bulk reject trades:', error);
+                showNotification(`Failed to bulk reject: ${error.message}`, 'error');
+            }
+        }
+        
+        function toggleTradingMode() {
+            const toggle = document.getElementById('trading-mode-toggle');
+            const text = document.getElementById('trading-mode-text');
+            const newMode = toggle.checked ? 'autopilot' : 'manual';
+            
+            text.textContent = newMode.charAt(0).toUpperCase() + newMode.slice(1);
+            
+            showNotification(`Trading mode UI updated to ${newMode}. Note: Restart required to change actual mode.`, 'info');
+            
+            // Update UI to reflect mode
+            updateTradingModeUI(newMode);
+        }
+        
+        function updateTradingModeUI(mode) {
+            const pendingTradesCard = document.getElementById('pending-trades-card');
+            pendingTradesCard.setAttribute('data-mode', mode);
+            
+            if (mode === 'autopilot') {
+                // Disable pending trades section in autopilot mode
+                const buttons = pendingTradesCard.querySelectorAll('button');
+                buttons.forEach(btn => btn.disabled = true);
+            } else {
+                // Enable pending trades section in manual mode
+                const buttons = pendingTradesCard.querySelectorAll('button');
+                buttons.forEach(btn => btn.disabled = false);
+                loadPendingTrades(); // Refresh pending trades
+            }
+        }
+        
+        function getTimeLeft(expiresAt) {
+            const now = Date.now();
+            const timeLeft = expiresAt - now;
+            
+            if (timeLeft <= 0) {
+                return 'Expired';
+            }
+            
+            const minutes = Math.floor(timeLeft / (1000 * 60));
+            const hours = Math.floor(minutes / 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes % 60}m`;
+            } else {
+                return `${minutes}m`;
+            }
+        }
+        
+        function viewTradeDetails(tradeId) {
+            // This could open a modal with detailed trade information
+            showNotification(`Trade details for ${tradeId} - Feature coming soon!`, 'info');
+        }
+
+        // OpenAI Cost Tracking Functions
+        let currentCostPeriod = '24h'; // '24h' or 'cumulative'
+        
+        async function loadCostData() {
+            try {
+                const endpoint = currentCostPeriod === '24h' ? '/api/costs/24h' : '/api/costs/cumulative';
+                const response = await fetch(endpoint);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateCostDisplay(data);
+                    showNotification(`${currentCostPeriod === '24h' ? '24h' : 'Cumulative'} cost data updated`, 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to load cost data');
+                }
+            } catch (error) {
+                console.error('Failed to load cost data:', error);
+                showNotification('Failed to load cost data', 'error');
+                
+                // Reset to zero values on error
+                updateCostDisplay({
+                    total_cost_usd: 0,
+                    total_calls: 0,
+                    total_tokens: 0,
+                    cost_by_model: {},
+                    cost_by_purpose: {}
+                });
+            }
+        }
+        
+        function updateCostDisplay(data) {
+            // Update main stats
+            const totalCost = data.total_cost_usd || 0;
+            const totalCalls = data.total_calls || 0;
+            const totalTokens = data.total_tokens || 0;
+            const avgCostPerCall = totalCalls > 0 ? totalCost / totalCalls : 0;
+            
+            document.getElementById('total-cost').textContent = `$${totalCost.toFixed(4)}`;
+            document.getElementById('total-calls').textContent = totalCalls.toLocaleString();
+            document.getElementById('total-tokens').textContent = totalTokens.toLocaleString();
+            document.getElementById('avg-cost-per-call').textContent = `$${avgCostPerCall.toFixed(4)}`;
+            
+            // Update model breakdown
+            const modelBreakdown = document.getElementById('model-breakdown');
+            if (data.cost_by_model && Object.keys(data.cost_by_model).length > 0) {
+                let modelHTML = '';
+                Object.entries(data.cost_by_model)
+                    .sort(([,a], [,b]) => b.cost_usd - a.cost_usd) // Sort by cost descending
+                    .forEach(([model, stats]) => {
+                        modelHTML += `
+                            <div class="breakdown-item">
+                                <div class="breakdown-label">
+                                    ${model}
+                                    <span class="breakdown-meta">(${stats.calls} calls)</span>
+                                </div>
+                                <div class="breakdown-cost">$${stats.cost_usd.toFixed(4)}</div>
+                            </div>
+                        `;
+                    });
+                modelBreakdown.innerHTML = modelHTML;
+            } else {
+                modelBreakdown.innerHTML = '<div class="loading-text">No model data available</div>';
+            }
+            
+            // Update purpose breakdown
+            const purposeBreakdown = document.getElementById('purpose-breakdown');
+            if (data.cost_by_purpose && Object.keys(data.cost_by_purpose).length > 0) {
+                let purposeHTML = '';
+                Object.entries(data.cost_by_purpose)
+                    .sort(([,a], [,b]) => b.cost_usd - a.cost_usd) // Sort by cost descending
+                    .forEach(([purpose, stats]) => {
+                        const displayPurpose = purpose.charAt(0).toUpperCase() + purpose.slice(1).replace(/_/g, ' ');
+                        purposeHTML += `
+                            <div class="breakdown-item">
+                                <div class="breakdown-label">
+                                    ${displayPurpose}
+                                    <span class="breakdown-meta">(${stats.calls} calls)</span>
+                                </div>
+                                <div class="breakdown-cost">$${stats.cost_usd.toFixed(4)}</div>
+                            </div>
+                        `;
+                    });
+                purposeBreakdown.innerHTML = purposeHTML;
+            } else {
+                purposeBreakdown.innerHTML = '<div class="loading-text">No purpose data available</div>';
+            }
+        }
+        
+        function toggleCostPeriod() {
+            const toggle = document.getElementById('cost-period-toggle');
+            const text = document.getElementById('cost-period-text');
+            
+            currentCostPeriod = toggle.checked ? 'cumulative' : '24h';
+            text.textContent = toggle.checked ? 'All Time' : 'Last 24 Hours';
+            
+            // Load new data
+            loadCostData();
+        }
+        
+        async function viewRecentCalls() {
+            try {
+                const response = await fetch('/api/costs/recent?limit=20');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showRecentCallsModal(data.calls);
+                } else {
+                    throw new Error(data.error || 'Failed to load recent calls');
+                }
+            } catch (error) {
+                console.error('Failed to load recent calls:', error);
+                showNotification('Failed to load recent API calls', 'error');
+            }
+        }
+        
+        function showRecentCallsModal(calls) {
+            // Create modal if it doesn't exist
+            let modal = document.getElementById('recent-calls-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'recent-calls-modal';
+                modal.innerHTML = `
+                    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: center; justify-content: center;">
+                        <div style="background: white; border-radius: 15px; padding: 25px; max-width: 1000px; max-height: 80vh; overflow-y: auto; margin: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <h3 style="margin: 0; color: #2c3e50;"><i class="fas fa-list"></i> Recent OpenAI API Calls</h3>
+                                <button onclick="closeRecentCallsModal()" style="background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 50%; cursor: pointer; font-size: 16px;">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div id="recent-calls-content"></div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            // Update content
+            const content = document.getElementById('recent-calls-content');
+            if (calls && calls.length > 0) {
+                let callsHTML = '<div style="font-size: 0.9em;">';
+                calls.forEach(call => {
+                    const date = new Date(call.timestamp).toLocaleString();
+                    const purposeDisplay = call.purpose.charAt(0).toUpperCase() + call.purpose.slice(1).replace(/_/g, ' ');
+                    
+                    callsHTML += `
+                        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: #f9f9f9;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                                <div>
+                                    <strong style="color: #2c3e50;">${call.model}</strong> - ${purposeDisplay}<br>
+                                    <small style="color: #7f8c8d;">${date}</small>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="color: #27ae60; font-weight: bold;">$${call.cost.toFixed(6)}</div>
+                                    <div style="font-size: 0.8em; color: #7f8c8d;">${call.tokens} tokens</div>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 0.8em; color: #7f8c8d;">
+                                <div><strong>Input:</strong> ${call.promptTokens} tokens</div>
+                                <div><strong>Output:</strong> ${call.completionTokens} tokens</div>
+                                <div><strong>Duration:</strong> ${(call.responseTime / 1000).toFixed(2)}s</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                callsHTML += '</div>';
+                content.innerHTML = callsHTML;
+            } else {
+                content.innerHTML = '<div style="text-align: center; color: #7f8c8d; padding: 20px;">No recent API calls found</div>';
+            }
+            
+            // Show modal
+            modal.style.display = 'flex';
+        }
+        
+        function closeRecentCallsModal() {
+            const modal = document.getElementById('recent-calls-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Auto-refresh data every 30 seconds
+        setInterval(() => {
+            if (socket.connected) {
+                controlBot('status');
+                loadPortfolioBalance(); // Also refresh portfolio data
+                loadPendingTrades(); // Also refresh pending trades
+                loadCostData(); // Also refresh cost data
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
