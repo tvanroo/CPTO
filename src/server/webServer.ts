@@ -14,7 +14,7 @@ import { geminiClient } from '../clients/geminiClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
-import { costTrackingService } from '../services/costTrackingService.js';
+import { costTrackingService } from '../services/costTrackingService';
 
 /**
  * Web server for CPTO Dashboard
@@ -573,7 +573,7 @@ export class WebServer {
       }
     });
     
-    this.app.get('/api/costs/recent', (_req, res) => {
+    this.app.get('/api/costs/recent', (req, res) => {
       try {
         const limit = parseInt(req.query.limit as string) || 50;
         const recentCalls = costTrackingService.getRecentApiCalls(limit);
@@ -590,7 +590,7 @@ export class WebServer {
       }
     });
     
-    this.app.delete('/api/costs/cleanup/:days', (_req, res) => {
+    this.app.delete('/api/costs/cleanup/:days', (req, res) => {
       try {
         const days = parseInt(req.params.days) || 7;
         if (days < 1 || days > 365) {
@@ -600,7 +600,7 @@ export class WebServer {
         costTrackingService.cleanupOldCalls(days);
         const stats = costTrackingService.getStats();
         
-        res.json({
+        return res.json({
           success: true,
           message: `Cleaned up API calls older than ${days} days`,
           stats,
