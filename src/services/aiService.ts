@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { config } from '../config';
 import { SentimentScore, TradeSignal, MarketData, MarketTrend, OpenAIAPIError } from '../types';
+import { costTrackingService } from './costTrackingService.js';
 
 /**
  * AI Service using OpenAI for sentiment analysis and trading decisions
@@ -26,6 +27,36 @@ export class AIService {
     
     this.model = config.openai.model;
     console.log(`AI Service initialized with model: ${this.model}`);
+  }
+
+  /**
+   * Track OpenAI API call for cost monitoring
+   */
+  private trackApiCall(
+    response: OpenAI.Chat.Completions.ChatCompletion, 
+    purpose: string,
+    inputText: string = '',
+    outputText: string = ''
+  ): void {
+    const isDev = process.env.SKIP_CONFIG_VALIDATION === 'true' || 
+                 config.openai.apiKey.startsWith('placeholder_');
+    
+    // Only track real API calls, not mock calls
+    if (isDev || !response.usage) {
+      return;
+    }
+
+    costTrackingService.trackApiCall(
+      response.model,
+      {
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens
+      },
+      purpose,
+      inputText.length,
+      outputText.length
+    );
   }
 
   /**
@@ -94,6 +125,9 @@ export class AIService {
       if (!content) {
         throw new OpenAIAPIError('Empty response from OpenAI');
       }
+
+      // Track API call for cost monitoring
+      this.trackApiCall(response, 'sentiment_analysis', text, content);
 
       // Parse the JSON response
       let sentimentData;
@@ -181,6 +215,9 @@ Trading Rules:
         throw new OpenAIAPIError('Empty response from OpenAI trading decision');
       }
 
+      // Track API call for cost monitoring
+      this.trackApiCall(response, 'trade_signal_generation', prompt, content);
+
       // Parse the JSON response
       let tradeData;
       try {
@@ -254,6 +291,9 @@ Text: "${text.substring(0, 500)}"`;
         return [];
       }
 
+      // Track API call for cost monitoring
+      this.trackApiCall(response, 'ticker_extraction', text, content);
+
       try {
         const tickers = JSON.parse(content);
         return Array.isArray(tickers) ? tickers.filter(t => typeof t === 'string') : [];
@@ -308,7 +348,12 @@ ${combinedText}`;
       
       const response = await this.openai.chat.completions.create(requestParams);
 
-      return response.choices[0]?.message?.content?.trim() || 'Unable to generate summary';
+      const content = response.choices[0]?.message?.content?.trim() || 'Unable to generate summary';
+      
+      // Track API call for cost monitoring
+      this.trackApiCall(response, 'content_summarization', combinedText, content);
+      
+      return content;
 
     } catch (error) {
       console.warn('Failed to summarize Reddit content:', error);
@@ -499,6 +544,9 @@ Consider:
       const content = response.choices[0]?.message?.content?.trim();
       console.log('OpenAI API connection successful');
       console.log(`Response content: "${content}"`);
+      
+      // Track API call for cost monitoring
+      this.trackApiCall(response, 'connection_test', 'Connection test', content || '');
       
       // If we got a valid response, the connection is working
       // Don't require exact text match as different models may respond differently

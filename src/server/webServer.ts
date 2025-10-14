@@ -14,6 +14,7 @@ import { geminiClient } from '../clients/geminiClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
+import { costTrackingService } from '../services/costTrackingService.js';
 
 /**
  * Web server for CPTO Dashboard
@@ -525,6 +526,90 @@ export class WebServer {
         
         res.json(systemInfo);
       });
+    });
+    
+    // OpenAI cost tracking
+    this.app.get('/api/costs/summary', (_req, res) => {
+      try {
+        const cumulative = costTrackingService.getCumulativeCostSummary();
+        const last24Hours = costTrackingService.getCostSummaryLast24Hours();
+        
+        res.json({
+          cumulative,
+          last24Hours,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.get('/api/costs/cumulative', (_req, res) => {
+      try {
+        const summary = costTrackingService.getCumulativeCostSummary();
+        
+        res.json({
+          ...summary,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.get('/api/costs/24h', (_req, res) => {
+      try {
+        const summary = costTrackingService.getCostSummaryLast24Hours();
+        
+        res.json({
+          ...summary,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.get('/api/costs/recent', (_req, res) => {
+      try {
+        const limit = parseInt(req.query.limit as string) || 50;
+        const recentCalls = costTrackingService.getRecentApiCalls(limit);
+        const stats = costTrackingService.getStats();
+        
+        res.json({
+          calls: recentCalls,
+          stats,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.delete('/api/costs/cleanup/:days', (_req, res) => {
+      try {
+        const days = parseInt(req.params.days) || 7;
+        if (days < 1 || days > 365) {
+          return res.status(400).json({ error: 'Days must be between 1 and 365' });
+        }
+        
+        costTrackingService.cleanupOldCalls(days);
+        const stats = costTrackingService.getStats();
+        
+        res.json({
+          success: true,
+          message: `Cleaned up API calls older than ${days} days`,
+          stats,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
     });
   }
 

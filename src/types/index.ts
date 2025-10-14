@@ -125,6 +125,44 @@ export interface TradeApproval {
   userId?: string;
 }
 
+/**
+ * OpenAI API cost tracking types
+ */
+export interface OpenAIUsageMetrics {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface OpenAIApiCall {
+  id: string;
+  timestamp: number;
+  model: string;
+  usage: OpenAIUsageMetrics;
+  cost_usd: number;
+  purpose: string; // e.g., 'sentiment_analysis', 'trade_signal_generation'
+  input_length: number;
+  output_length: number;
+}
+
+export interface OpenAICostSummary {
+  total_calls: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  cost_by_model: Record<string, {
+    calls: number;
+    tokens: number;
+    cost_usd: number;
+  }>;
+  cost_by_purpose: Record<string, {
+    calls: number;
+    tokens: number;
+    cost_usd: number;
+  }>;
+  period_start: number;
+  period_end: number;
+}
+
 // Database types
 export interface DatabaseRedditItem {
   id: string;
