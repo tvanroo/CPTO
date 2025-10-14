@@ -1,5 +1,9 @@
-import { OpenAIApiCall, OpenAICostSummary, OpenAIUsageMetrics } from '../types/index.js';
-import { v4 as uuidv4 } from 'uuid';
+import { OpenAIApiCall, OpenAICostSummary, OpenAIUsageMetrics } from '../types/index';
+
+// Simple UUID generator to avoid ES module issues
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
 
 /**
  * OpenAI API pricing per model (as of 2024)
@@ -56,7 +60,7 @@ export class CostTrackingService {
     outputLength: number = 0
   ): OpenAIApiCall {
     const apiCall: OpenAIApiCall = {
-      id: uuidv4(),
+      id: generateId(),
       timestamp: Date.now(),
       model,
       usage,
