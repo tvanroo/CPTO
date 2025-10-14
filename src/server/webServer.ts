@@ -467,7 +467,7 @@ export class WebServer {
           message: `Bulk ${action}: ${result.processed.length} processed, ${result.errors.length} errors`
         });
         
-        res.json({
+        return res.json({
           success: true,
           message: `Bulk ${action} completed`,
           processed: result.processed.length,
@@ -476,7 +476,7 @@ export class WebServer {
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        res.status(500).json({ error: errorMessage });
+        return res.status(500).json({ error: errorMessage });
       }
     });
     
@@ -505,7 +505,7 @@ export class WebServer {
       
       // Note: In a production system, you'd want to update the config file or environment
       // For now, we'll just inform the user that a restart is needed
-      res.json({
+      return res.json({
         success: true,
         message: `Trading mode change to '${mode}' requested. Update TRADING_MODE environment variable and restart the application.`,
         currentMode: config.trading.tradingMode,
