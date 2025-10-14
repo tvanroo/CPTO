@@ -16,6 +16,7 @@ import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
 import { costTrackingService } from '../services/costTrackingService';
 import { dataStorageService } from '../services/dataStorageService';
+import { backtestingService } from '../services/backtestingService';
 
 /**
  * Web server for CPTO Dashboard
@@ -906,6 +907,292 @@ export class WebServer {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // BACKTESTING ENDPOINTS
+    
+    // Run a backtest with specified configuration
+    this.app.post('/api/backtesting/run', async (req, res) => {
+      try {
+        const {
+          ticker,
+          startDate,
+          endDate,
+          initialBalance = 10000,
+          tradeAmountUSD = 100,
+          sentimentThreshold = 0.3,
+          confidenceThreshold = 0.7,
+          maxTradesPerDay = 5
+        } = req.body;
+        
+        // Validate required parameters
+        if (!startDate || !endDate) {
+          return res.status(400).json({ 
+            error: 'startDate and endDate are required' 
+          });
+        }
+        
+        const config = {
+          ticker: ticker?.toUpperCase(),
+          startDate: new Date(startDate).getTime(),
+          endDate: new Date(endDate).getTime(),
+          initialBalance,
+          tradeAmountUSD,
+          sentimentThreshold,
+          confidenceThreshold,
+          maxTradesPerDay
+        };
+        
+        // Validate date range
+        if (config.startDate >= config.endDate) {
+          return res.status(400).json({ 
+            error: 'startDate must be before endDate' 
+          });
+        }
+        
+        console.log(`🔄 Starting backtest for ${ticker || 'ALL'} from ${new Date(startDate).toISOString().split('T')[0]} to ${new Date(endDate).toISOString().split('T')[0]}`);
+        
+        const result = await backtestingService.runBacktest(config);
+        
+        return res.json({
+          success: true,
+          backtest: result,
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('Backtesting error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Optimize strategy parameters
+    this.app.post('/api/backtesting/optimize', async (req, res) => {
+      try {
+        const {
+          ticker,
+          startDate,
+          endDate,
+          parameter,
+          values,
+          baseConfig = {}
+        } = req.body;
+        
+        // Validate required parameters
+        if (!startDate || !endDate || !parameter || !Array.isArray(values)) {
+          return res.status(400).json({ 
+            error: 'startDate, endDate, parameter, and values array are required' 
+          });
+        }
+        
+        if (values.length === 0) {
+          return res.status(400).json({ 
+            error: 'Values array cannot be empty' 
+          });
+        }
+        
+        if (values.length > 20) {
+          return res.status(400).json({ 
+            error: 'Maximum 20 optimization values allowed' 
+          });
+        }
+        
+        const config = {
+          ticker: ticker?.toUpperCase(),
+          startDate: new Date(startDate).getTime(),
+          endDate: new Date(endDate).getTime(),
+          initialBalance: 10000,
+          tradeAmountUSD: 100,
+          sentimentThreshold: 0.3,
+          confidenceThreshold: 0.7,
+          maxTradesPerDay: 5,
+          ...baseConfig
+        };
+        
+        console.log(`🔧 Optimizing ${parameter} with ${values.length} values for ${ticker || 'ALL'}`);
+        
+        const result = await backtestingService.optimizeStrategy(config, parameter, values);
+        
+        return res.json({
+          success: true,
+          optimization: result,
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('Strategy optimization error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Compare multiple strategies
+    this.app.post('/api/backtesting/compare', async (req, res) => {
+      try {
+        const { strategies } = req.body;
+        
+        // Validate strategies input
+        if (!Array.isArray(strategies) || strategies.length === 0) {
+          return res.status(400).json({ 
+            error: 'Strategies array is required' 
+          });
+        }
+        
+        if (strategies.length > 5) {
+          return res.status(400).json({ 
+            error: 'Maximum 5 strategies allowed for comparison' 
+          });
+        }
+        
+        // Validate each strategy
+        for (const strategy of strategies) {
+          if (!strategy.name || !strategy.config) {
+            return res.status(400).json({ 
+              error: 'Each strategy must have a name and config' 
+            });
+          }
+          
+          if (!strategy.config.startDate || !strategy.config.endDate) {
+            return res.status(400).json({ 
+              error: 'Each strategy config must have startDate and endDate' 
+            });
+          }
+          
+          // Convert dates to timestamps
+          strategy.config.startDate = new Date(strategy.config.startDate).getTime();
+          strategy.config.endDate = new Date(strategy.config.endDate).getTime();
+          
+          // Set defaults
+          strategy.config = {
+            initialBalance: 10000,
+            tradeAmountUSD: 100,
+            sentimentThreshold: 0.3,
+            confidenceThreshold: 0.7,
+            maxTradesPerDay: 5,
+            ...strategy.config
+          };
+        }
+        
+        console.log(`📊 Comparing ${strategies.length} strategies`);
+        
+        const result = await backtestingService.compareStrategies(strategies);
+        
+        return res.json({
+          success: true,
+          comparison: result,
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('Strategy comparison error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Analyze sentiment momentum patterns
+    this.app.get('/api/backtesting/sentiment-momentum/:ticker', async (req, res) => {
+      try {
+        const { ticker } = req.params;
+        const days = parseInt(req.query.days as string) || 30;
+        
+        if (!ticker) {
+          return res.status(400).json({ error: 'Ticker is required' });
+        }
+        
+        console.log(`📈 Analyzing sentiment momentum for ${ticker.toUpperCase()} over ${days} days`);
+        
+        const result = await backtestingService.analyzeSentimentMomentum(ticker.toUpperCase(), days);
+        
+        return res.json({
+          success: true,
+          ticker: ticker.toUpperCase(),
+          days,
+          analysis: result,
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('Sentiment momentum analysis error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get sample backtest configurations for quick testing
+    this.app.get('/api/backtesting/presets', async (_req, res) => {
+      try {
+        const now = Date.now();
+        const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
+        
+        const presets = {
+          conservative: {
+            name: 'Conservative Strategy',
+            description: 'High confidence threshold, low risk',
+            config: {
+              startDate: thirtyDaysAgo,
+              endDate: now,
+              initialBalance: 10000,
+              tradeAmountUSD: 50,
+              sentimentThreshold: 0.5,
+              confidenceThreshold: 0.8,
+              maxTradesPerDay: 2
+            }
+          },
+          aggressive: {
+            name: 'Aggressive Strategy',
+            description: 'Lower thresholds, more trades',
+            config: {
+              startDate: thirtyDaysAgo,
+              endDate: now,
+              initialBalance: 10000,
+              tradeAmountUSD: 200,
+              sentimentThreshold: 0.2,
+              confidenceThreshold: 0.6,
+              maxTradesPerDay: 10
+            }
+          },
+          balanced: {
+            name: 'Balanced Strategy',
+            description: 'Moderate risk and reward',
+            config: {
+              startDate: thirtyDaysAgo,
+              endDate: now,
+              initialBalance: 10000,
+              tradeAmountUSD: 100,
+              sentimentThreshold: 0.3,
+              confidenceThreshold: 0.7,
+              maxTradesPerDay: 5
+            }
+          },
+          shortTerm: {
+            name: 'Short-term Strategy',
+            description: 'Week-long backtesting period',
+            config: {
+              startDate: sevenDaysAgo,
+              endDate: now,
+              initialBalance: 5000,
+              tradeAmountUSD: 100,
+              sentimentThreshold: 0.3,
+              confidenceThreshold: 0.7,
+              maxTradesPerDay: 5
+            }
+          }
+        };
+        
+        return res.json({
+          success: true,
+          presets,
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('Presets error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
       }
     });
   }
