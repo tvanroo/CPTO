@@ -72,12 +72,11 @@ run_remote "cd $SERVER_PATH && npm install"
 
 # Build the project
 echo "4️⃣ Building TypeScript code..."
-run_remote_cmd "cd $REMOTE_PATH && npm run build"
+run_remote "cd $SERVER_PATH && npm run build"
 
 echo "4.5️⃣ Running database migration..."
-run_remote_cmd "cd $REMOTE_PATH && node migrate-db.js"
+run_remote "cd $SERVER_PATH && node migrate-db.js"
 
-echo "5️⃣ Starting main CPTO service..."
 echo "5️⃣ Starting main CPTO service..."
 run_remote "cd $SERVER_PATH && pm2 restart ecosystem.config.js --env production"
 
