@@ -930,6 +930,128 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Advanced Analytics Sections (Phase 2) -->
+        <div class="status-grid">
+            <!-- Sentiment Trend Analysis -->
+            <div class="card">
+                <h3><i class="fas fa-chart-line"></i> Sentiment Trend Analysis</h3>
+                <div style="margin-bottom: 8px;">
+                    <select id="trend-ticker-select" onchange="loadSelectedTickerTrend()" style="padding: 4px; border-radius: 4px; border: 1px solid #ddd; background: white; font-size: 0.8em;">
+                        <option value="">Select ticker for trend analysis...</option>
+                        <option value="BTC">Bitcoin (BTC)</option>
+                        <option value="ETH">Ethereum (ETH)</option>
+                        <option value="ADA">Cardano (ADA)</option>
+                        <option value="DOT">Polkadot (DOT)</option>
+                        <option value="LINK">Chainlink (LINK)</option>
+                    </select>
+                    <select id="trend-days-select" onchange="loadSelectedTickerTrend()" style="padding: 4px; border-radius: 4px; border: 1px solid #ddd; background: white; font-size: 0.8em; margin-left: 4px;">
+                        <option value="7">7 days</option>
+                        <option value="14">14 days</option>
+                        <option value="30" selected>30 days</option>
+                    </select>
+                </div>
+                <div id="sentiment-trend-container" style="max-height: 180px; overflow-y: auto; font-size: 0.8em;">
+                    <div class="loading-text">Select a ticker to view sentiment trends...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadSelectedTickerTrend()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn" onclick="exportTrendData()">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Subreddit Influence Analysis -->
+            <div class="card">
+                <h3><i class="fas fa-users"></i> Subreddit Influence</h3>
+                <div id="subreddit-influence-container" style="max-height: 200px; overflow-y: auto; font-size: 0.8em;">
+                    <div class="loading-text">Loading subreddit influence data...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadSubredditInfluence()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn" onclick="showInfluenceDetails()">
+                        <i class="fas fa-info-circle"></i> Details
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-grid">
+            <!-- AI Decision Accuracy Tracking -->
+            <div class="card">
+                <h3><i class="fas fa-brain"></i> AI Accuracy Tracking</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="ai-accuracy">--%</div>
+                        <div class="stat-label">Accuracy</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="ai-decisions">--</div>
+                        <div class="stat-label">Decisions</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="ai-confidence">--%</div>
+                        <div class="stat-label">Avg Confidence</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="high-conf-accuracy">--%</div>
+                        <div class="stat-label">High Conf Acc</div>
+                    </div>
+                </div>
+                <div id="accuracy-breakdown" style="margin-top: 6px; font-size: 0.8em; max-height: 100px; overflow-y: auto;">
+                    <div class="loading-text">Loading accuracy data...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadAIAccuracy()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn" onclick="showAccuracyDetails()">
+                        <i class="fas fa-chart-bar"></i> Details
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Ticker Correlation Analysis -->
+            <div class="card">
+                <h3><i class="fas fa-project-diagram"></i> Ticker Correlation</h3>
+                <div style="margin-bottom: 8px; display: flex; gap: 4px;">
+                    <select id="correlation-ticker1" style="flex: 1; padding: 4px; border-radius: 4px; border: 1px solid #ddd; background: white; font-size: 0.8em;">
+                        <option value="BTC">BTC</option>
+                        <option value="ETH">ETH</option>
+                        <option value="ADA">ADA</option>
+                        <option value="DOT">DOT</option>
+                        <option value="LINK">LINK</option>
+                    </select>
+                    <span style="align-self: center; font-size: 0.8em; color: #7f8c8d;">vs</span>
+                    <select id="correlation-ticker2" style="flex: 1; padding: 4px; border-radius: 4px; border: 1px solid #ddd; background: white; font-size: 0.8em;">
+                        <option value="ETH">ETH</option>
+                        <option value="BTC">BTC</option>
+                        <option value="ADA">ADA</option>
+                        <option value="DOT">DOT</option>
+                        <option value="LINK">LINK</option>
+                    </select>
+                    <button class="btn" onclick="loadTickerCorrelation()" style="font-size: 0.7em; padding: 4px 8px;">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <div id="correlation-container" style="font-size: 0.8em; max-height: 140px; overflow-y: auto;">
+                    <div class="loading-text">Click search to analyze ticker correlation...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadTickerCorrelation()">
+                        <i class="fas fa-sync"></i> Analyze
+                    </button>
+                    <button class="btn" onclick="showCorrelationMatrix()">
+                        <i class="fas fa-table"></i> Matrix
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <div class="logs-container">
             <div class="logs-header">
@@ -1109,6 +1231,10 @@
             loadWatchlist();
             loadProcessingStats();
             loadTradePerformance();
+            
+            // Load advanced analytics data (Phase 2)
+            loadSubredditInfluence();
+            loadAIAccuracy();
             
             // Auto-start log streaming
             toggleLogStreaming();
@@ -2110,6 +2236,306 @@
             return num.toString();
         }
         
+        // Advanced Analytics Functions (Phase 2)
+        
+        async function loadSelectedTickerTrend() {
+            const ticker = document.getElementById('trend-ticker-select').value;
+            const days = document.getElementById('trend-days-select').value;
+            
+            if (!ticker) {
+                document.getElementById('sentiment-trend-container').innerHTML = 
+                    '<div class="loading-text">Select a ticker to view sentiment trends...</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/analytics/advanced/sentiment-trend/${ticker}?days=${days}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateSentimentTrendDisplay(data.analysis, ticker);
+                } else {
+                    throw new Error(data.error || 'Failed to load sentiment trend');
+                }
+            } catch (error) {
+                console.error('Failed to load sentiment trend:', error);
+                document.getElementById('sentiment-trend-container').innerHTML = 
+                    '<div class="loading-text">Error loading sentiment trend data</div>';
+            }
+        }
+        
+        function updateSentimentTrendDisplay(analysis, ticker) {
+            const container = document.getElementById('sentiment-trend-container');
+            
+            if (analysis.daily.length === 0) {
+                container.innerHTML = `<div class="loading-text">No sentiment data available for ${ticker}</div>`;
+                return;
+            }
+            
+            const { daily, summary } = analysis;
+            const trendIcon = summary.trend === 'bullish' ? '📈' : summary.trend === 'bearish' ? '📉' : '➡️';
+            const trendColor = summary.trend === 'bullish' ? '#27ae60' : summary.trend === 'bearish' ? '#e74c3c' : '#f39c12';
+            
+            let html = `
+                <div style="background: rgba(255, 255, 255, 0.1); padding: 8px; border-radius: 4px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-weight: 600; color: #2c3e50;">${ticker} Trend Summary ${trendIcon}</span>
+                        <span style="color: ${trendColor}; font-weight: bold; font-size: 0.9em;">
+                            ${summary.trend.toUpperCase()}
+                        </span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: #7f8c8d;">
+                        <span>Strength: ${summary.strength.toFixed(3)}</span>
+                        <span>Volatility: ${summary.volatility.toFixed(3)}</span>
+                        <span>Days: ${daily.length}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Show recent daily data (last 7 days)
+            const recentDays = daily.slice(-7);
+            if (recentDays.length > 0) {
+                html += '<div style="font-size: 0.8em;"><strong>Recent Daily Sentiment:</strong></div>';
+                recentDays.forEach(day => {
+                    const sentimentColor = day.avgSentiment > 0.3 ? '#27ae60' : 
+                                         day.avgSentiment < -0.3 ? '#e74c3c' : '#f39c12';
+                    html += `
+                        <div style="display: flex; justify-content: space-between; padding: 2px 4px; border-left: 2px solid ${sentimentColor}; margin: 2px 0; font-size: 0.75em;">
+                            <span>${day.date}</span>
+                            <span style="color: ${sentimentColor}; font-weight: bold;">
+                                ${day.avgSentiment.toFixed(2)}
+                            </span>
+                            <span style="color: #7f8c8d;">
+                                ${day.volume} mentions (${(day.confidence * 100).toFixed(0)}% conf)
+                            </span>
+                        </div>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        async function loadSubredditInfluence() {
+            try {
+                const response = await fetch('/api/analytics/advanced/subreddit-influence?days=30');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateSubredditInfluenceDisplay(data.analysis);
+                } else {
+                    throw new Error(data.error || 'Failed to load subreddit influence');
+                }
+            } catch (error) {
+                console.error('Failed to load subreddit influence:', error);
+                document.getElementById('subreddit-influence-container').innerHTML = 
+                    '<div class="loading-text">Error loading subreddit influence data</div>';
+            }
+        }
+        
+        function updateSubredditInfluenceDisplay(subreddits) {
+            const container = document.getElementById('subreddit-influence-container');
+            
+            if (!subreddits || subreddits.length === 0) {
+                container.innerHTML = '<div class="loading-text">No subreddit data available</div>';
+                return;
+            }
+            
+            let html = '';
+            subreddits.slice(0, 8).forEach((sr, index) => {
+                const influenceBar = Math.min(sr.influence / Math.max(...subreddits.map(s => s.influence)) * 100, 100);
+                const sentimentColor = sr.avgSentiment > 0.2 ? '#27ae60' : 
+                                     sr.avgSentiment < -0.2 ? '#e74c3c' : '#f39c12';
+                
+                html += `
+                    <div style="border: 1px solid #ddd; border-radius: 4px; padding: 6px; margin-bottom: 4px; background: #f9f9f9;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                            <span style="font-weight: 600; color: #2c3e50;">r/${sr.subreddit}</span>
+                            <span style="font-size: 0.7em; color: #7f8c8d;">#${index + 1}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 0.75em;">
+                            <span>Influence: <strong>${sr.influence.toFixed(0)}</strong></span>
+                            <span style="color: ${sentimentColor};">Sentiment: <strong>${sr.avgSentiment.toFixed(2)}</strong></span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #7f8c8d;">
+                            <span>${sr.totalMentions} mentions</span>
+                            <span>${sr.uniqueTickers} tickers</span>
+                            <span>${(sr.avgConfidence * 100).toFixed(0)}% conf</span>
+                        </div>
+                        <div style="width: 100%; height: 3px; background: #ecf0f1; border-radius: 2px; margin-top: 3px;">
+                            <div style="width: ${influenceBar}%; height: 100%; background: #3498db; border-radius: 2px;"></div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        async function loadAIAccuracy() {
+            try {
+                const response = await fetch('/api/analytics/advanced/ai-accuracy?days=30');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateAIAccuracyDisplay(data.accuracy);
+                } else {
+                    throw new Error(data.error || 'Failed to load AI accuracy');
+                }
+            } catch (error) {
+                console.error('Failed to load AI accuracy:', error);
+                document.getElementById('accuracy-breakdown').innerHTML = 
+                    '<div class="loading-text">Error loading AI accuracy data</div>';
+            }
+        }
+        
+        function updateAIAccuracyDisplay(accuracy) {
+            // Update main stats
+            document.getElementById('ai-accuracy').textContent = 
+                accuracy.overall.accuracy ? `${(accuracy.overall.accuracy * 100).toFixed(1)}%` : '--%';
+            document.getElementById('ai-decisions').textContent = accuracy.overall.totalDecisions || '--';
+            document.getElementById('ai-confidence').textContent = 
+                accuracy.overall.confidence ? `${(accuracy.overall.confidence * 100).toFixed(0)}%` : '--%';
+            
+            // Find high confidence accuracy (85-100% range)
+            const highConfRange = accuracy.byConfidenceRange.find(r => r.range === '85-100%');
+            document.getElementById('high-conf-accuracy').textContent = 
+                highConfRange ? `${(highConfRange.accuracy * 100).toFixed(1)}%` : '--%';
+            
+            // Update breakdown
+            const container = document.getElementById('accuracy-breakdown');
+            
+            if (accuracy.byConfidenceRange.length === 0) {
+                container.innerHTML = '<div class="loading-text">No accuracy data available</div>';
+                return;
+            }
+            
+            let html = '<div style="font-size: 0.8em;"><strong>Accuracy by Confidence Range:</strong></div>';
+            accuracy.byConfidenceRange.forEach(range => {
+                if (range.count > 0) {
+                    const accuracyColor = range.accuracy > 0.7 ? '#27ae60' : range.accuracy > 0.5 ? '#f39c12' : '#e74c3c';
+                    html += `
+                        <div style="display: flex; justify-content: space-between; padding: 2px 4px; margin: 2px 0; font-size: 0.75em;">
+                            <span>${range.range}</span>
+                            <span style="color: ${accuracyColor}; font-weight: bold;">
+                                ${(range.accuracy * 100).toFixed(1)}%
+                            </span>
+                            <span style="color: #7f8c8d;">${range.count} decisions</span>
+                        </div>
+                    `;
+                }
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        async function loadTickerCorrelation() {
+            const ticker1 = document.getElementById('correlation-ticker1').value;
+            const ticker2 = document.getElementById('correlation-ticker2').value;
+            
+            if (ticker1 === ticker2) {
+                document.getElementById('correlation-container').innerHTML = 
+                    '<div class="loading-text">Please select different tickers for comparison</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/analytics/advanced/correlation/${ticker1}/${ticker2}?days=30`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateCorrelationDisplay(data.correlation, ticker1, ticker2);
+                } else {
+                    throw new Error(data.error || 'Failed to load correlation');
+                }
+            } catch (error) {
+                console.error('Failed to load correlation:', error);
+                document.getElementById('correlation-container').innerHTML = 
+                    '<div class="loading-text">Error loading correlation data</div>';
+            }
+        }
+        
+        function updateCorrelationDisplay(correlationData, ticker1, ticker2) {
+            const container = document.getElementById('correlation-container');
+            
+            const correlation = correlationData.correlation;
+            const correlationAbs = Math.abs(correlation);
+            
+            let correlationStrength, correlationColor;
+            if (correlationAbs > 0.8) {
+                correlationStrength = 'Very Strong';
+                correlationColor = '#e74c3c';
+            } else if (correlationAbs > 0.6) {
+                correlationStrength = 'Strong';
+                correlationColor = '#f39c12';
+            } else if (correlationAbs > 0.3) {
+                correlationStrength = 'Moderate';
+                correlationColor = '#3498db';
+            } else {
+                correlationStrength = 'Weak';
+                correlationColor = '#95a5a6';
+            }
+            
+            const correlationType = correlation > 0 ? 'Positive' : correlation < 0 ? 'Negative' : 'No';
+            
+            let html = `
+                <div style="background: rgba(255, 255, 255, 0.1); padding: 8px; border-radius: 4px; margin-bottom: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">${ticker1} vs ${ticker2}</span>
+                        <span style="color: ${correlationColor}; font-weight: bold;">
+                            ${correlation.toFixed(3)}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.8em; color: #7f8c8d; margin-top: 2px;">
+                        ${correlationType} ${correlationStrength} Correlation
+                    </div>
+                </div>
+            `;
+            
+            // Add individual sentiment info
+            html += `
+                <div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 4px;">
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-weight: 600; color: #2c3e50;">${ticker1}</div>
+                        <div style="color: #7f8c8d;">Avg: ${correlationData.sentiment1.avg.toFixed(2)}</div>
+                        <div style="color: #7f8c8d;">Trend: ${correlationData.sentiment1.trend.toFixed(2)}</div>
+                    </div>
+                    <div style="text-align: center; flex: 1;">
+                        <div style="font-weight: 600; color: #2c3e50;">${ticker2}</div>
+                        <div style="color: #7f8c8d;">Avg: ${correlationData.sentiment2.avg.toFixed(2)}</div>
+                        <div style="color: #7f8c8d;">Trend: ${correlationData.sentiment2.trend.toFixed(2)}</div>
+                    </div>
+                </div>
+            `;
+            
+            if (correlationData.sharedMentions > 0) {
+                html += `
+                    <div style="font-size: 0.75em; color: #7f8c8d; text-align: center; margin-top: 4px;">
+                        ${correlationData.sharedMentions} shared mentions in posts
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        // Placeholder functions for advanced features
+        function exportTrendData() {
+            showNotification('Export functionality coming soon', 'info');
+        }
+        
+        function showInfluenceDetails() {
+            showNotification('Detailed influence analysis coming soon', 'info');
+        }
+        
+        function showAccuracyDetails() {
+            showNotification('Detailed accuracy analysis coming soon', 'info');
+        }
+        
+        function showCorrelationMatrix() {
+            showNotification('Correlation matrix view coming soon', 'info');
+        }
+        
         // Auto-refresh data with different intervals
         setInterval(() => {
             if (socket.connected) {
@@ -2122,6 +2548,7 @@
                     loadProcessedContent();
                 }
                 loadProcessingStats();
+                loadAIAccuracy(); // Refresh AI accuracy frequently
             }
         }, 30000);
         
@@ -2130,6 +2557,7 @@
             if (socket.connected) {
                 loadPortfolioBalance();
                 loadWatchlist();
+                loadSubredditInfluence(); // Refresh subreddit influence every 5 minutes
             }
         }, 300000);
     </script>

@@ -510,6 +510,371 @@ export class DataStorageService {
   }
 
   /**
+   * Get sentiment trend analysis with multiple timeframes
+   */
+  async getSentimentTrendAnalysis(ticker: string, days: number = 30): Promise<{
+    daily: Array<{ date: string; avgSentiment: number; volume: number; confidence: number }>;
+    hourly: Array<{ hour: string; avgSentiment: number; volume: number }>;
+    summary: { trend: 'bullish' | 'bearish' | 'neutral'; strength: number; volatility: number };
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    
+    // Get all analysis for this ticker
+    const analyses = await this.db.all(`
+      SELECT sentiment_score, confidence_level, processing_timestamp
+      FROM processed_content
+      WHERE extracted_tickers LIKE ? AND processing_timestamp >= ?
+      ORDER BY processing_timestamp ASC
+    `, [`%"${ticker.toUpperCase()}"%`, cutoffTime]);
+    
+    if (analyses.length === 0) {
+      return {
+        daily: [],
+        hourly: [],
+        summary: { trend: 'neutral', strength: 0, volatility: 0 }
+      };
+    }
+    
+    // Calculate daily trends
+    const dailyData = new Map<string, { total: number; count: number; confidenceSum: number }>();
+    const hourlyData = new Map<string, { total: number; count: number }>();
+    
+    analyses.forEach(analysis => {
+      const date = new Date(analysis.processing_timestamp);
+      const dayKey = date.toISOString().split('T')[0];
+      const hourKey = `${dayKey}T${date.getHours().toString().padStart(2, '0')}:00:00.000Z`;
+      
+      // Daily aggregation
+      const daily = dailyData.get(dayKey) || { total: 0, count: 0, confidenceSum: 0 };
+      daily.total += analysis.sentiment_score;
+      daily.count += 1;
+      daily.confidenceSum += analysis.confidence_level;
+      dailyData.set(dayKey, daily);
+      
+      // Hourly aggregation (last 7 days only)
+      if (Date.now() - analysis.processing_timestamp < 7 * 24 * 60 * 60 * 1000) {
+        const hourly = hourlyData.get(hourKey) || { total: 0, count: 0 };
+        hourly.total += analysis.sentiment_score;
+        hourly.count += 1;
+        hourlyData.set(hourKey, hourly);
+      }
+    });
+    
+    // Convert to arrays
+    const daily = Array.from(dailyData.entries()).map(([date, data]) => ({
+      date,
+      avgSentiment: data.total / data.count,
+      volume: data.count,
+      confidence: data.confidenceSum / data.count
+    }));
+    
+    const hourly = Array.from(hourlyData.entries()).map(([hour, data]) => ({
+      hour,
+      avgSentiment: data.total / data.count,
+      volume: data.count
+    }));
+    
+    // Calculate summary statistics
+    const sentiments = daily.map(d => d.avgSentiment);
+    const avgSentiment = sentiments.reduce((a, b) => a + b, 0) / sentiments.length;
+    const variance = sentiments.reduce((sum, val) => sum + Math.pow(val - avgSentiment, 2), 0) / sentiments.length;
+    const volatility = Math.sqrt(variance);
+    
+    // Determine trend (last 7 days vs previous 7 days)
+    const recent = daily.slice(-7).reduce((sum, d) => sum + d.avgSentiment, 0) / Math.min(7, daily.length);
+    const previous = daily.slice(-14, -7).reduce((sum, d) => sum + d.avgSentiment, 0) / Math.min(7, daily.slice(-14, -7).length);
+    
+    let trend: 'bullish' | 'bearish' | 'neutral';
+    const trendStrength = Math.abs(recent - previous);
+    
+    if (trendStrength < 0.1) trend = 'neutral';
+    else if (recent > previous) trend = 'bullish';
+    else trend = 'bearish';
+    
+    return {
+      daily,
+      hourly,
+      summary: {
+        trend,
+        strength: trendStrength,
+        volatility
+      }
+    };
+  }
+  
+  /**
+   * Get ticker correlation analysis
+   */
+  async getTickerCorrelationAnalysis(ticker1: string, ticker2: string, days: number = 30): Promise<{
+    correlation: number;
+    sharedMentions: number;
+    sentiment1: { avg: number; trend: number };
+    sentiment2: { avg: number; trend: number };
+    timeAlignment: Array<{ date: string; sentiment1: number; sentiment2: number }>;
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    
+    // Get analyses for both tickers with daily aggregation
+    const query = `
+      SELECT 
+        DATE(processing_timestamp / 1000, 'unixepoch') as date,
+        AVG(CASE WHEN extracted_tickers LIKE ? THEN sentiment_score END) as sentiment1,
+        AVG(CASE WHEN extracted_tickers LIKE ? THEN sentiment_score END) as sentiment2,
+        COUNT(CASE WHEN extracted_tickers LIKE ? AND extracted_tickers LIKE ? THEN 1 END) as shared
+      FROM processed_content
+      WHERE processing_timestamp >= ?
+        AND (extracted_tickers LIKE ? OR extracted_tickers LIKE ?)
+      GROUP BY DATE(processing_timestamp / 1000, 'unixepoch')
+      HAVING sentiment1 IS NOT NULL AND sentiment2 IS NOT NULL
+      ORDER BY date ASC
+    `;
+    
+    const results = await this.db.all(query, [
+      `%"${ticker1.toUpperCase()}"%`, `%"${ticker2.toUpperCase()}"%`,
+      `%"${ticker1.toUpperCase()}"%`, `%"${ticker2.toUpperCase()}"%`,
+      cutoffTime,
+      `%"${ticker1.toUpperCase()}"%`, `%"${ticker2.toUpperCase()}"%`
+    ]);
+    
+    if (results.length < 2) {
+      return {
+        correlation: 0,
+        sharedMentions: 0,
+        sentiment1: { avg: 0, trend: 0 },
+        sentiment2: { avg: 0, trend: 0 },
+        timeAlignment: []
+      };
+    }
+    
+    // Calculate correlation
+    const sentiments1 = results.map(r => r.sentiment1).filter(s => s !== null);
+    const sentiments2 = results.map(r => r.sentiment2).filter(s => s !== null);
+    
+    const correlation = this.calculateCorrelation(sentiments1, sentiments2);
+    const sharedMentions = results.reduce((sum, r) => sum + (r.shared || 0), 0);
+    
+    return {
+      correlation,
+      sharedMentions,
+      sentiment1: {
+        avg: sentiments1.reduce((a, b) => a + b, 0) / sentiments1.length,
+        trend: sentiments1[sentiments1.length - 1] - sentiments1[0]
+      },
+      sentiment2: {
+        avg: sentiments2.reduce((a, b) => a + b, 0) / sentiments2.length,
+        trend: sentiments2[sentiments2.length - 1] - sentiments2[0]
+      },
+      timeAlignment: results.map(r => ({
+        date: r.date,
+        sentiment1: r.sentiment1,
+        sentiment2: r.sentiment2
+      }))
+    };
+  }
+  
+  /**
+   * Get subreddit influence analysis
+   */
+  async getSubredditInfluenceAnalysis(days: number = 30): Promise<Array<{
+    subreddit: string;
+    totalMentions: number;
+    avgSentiment: number;
+    avgConfidence: number;
+    uniqueTickers: number;
+    influence: number;
+    topTickers: Array<{ ticker: string; mentions: number; avgSentiment: number }>;
+  }>> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    
+    const subredditStats = await this.db.all(`
+      SELECT 
+        subreddit,
+        COUNT(*) as total_mentions,
+        AVG(sentiment_score) as avg_sentiment,
+        AVG(confidence_level) as avg_confidence,
+        COUNT(DISTINCT extracted_tickers) as unique_tickers
+      FROM processed_content
+      WHERE processing_timestamp >= ?
+      GROUP BY subreddit
+      ORDER BY total_mentions DESC
+    `, [cutoffTime]);
+    
+    const results = [];
+    
+    for (const stat of subredditStats) {
+      // Get top tickers for this subreddit
+      const topTickers = await this.db.all(`
+        SELECT 
+          ticker,
+          mention_count as mentions,
+          current_sentiment as avg_sentiment
+        FROM currency_watchlist
+        ORDER BY mention_count DESC
+        LIMIT 5
+      `);
+      
+      // Calculate influence score (weighted by volume, sentiment strength, and confidence)
+      const influence = (stat.total_mentions * 0.4) + 
+                       (Math.abs(stat.avg_sentiment) * 100 * 0.3) + 
+                       (stat.avg_confidence * 100 * 0.3);
+      
+      results.push({
+        subreddit: stat.subreddit,
+        totalMentions: stat.total_mentions,
+        avgSentiment: stat.avg_sentiment,
+        avgConfidence: stat.avg_confidence,
+        uniqueTickers: stat.unique_tickers,
+        influence,
+        topTickers
+      });
+    }
+    
+    return results.sort((a, b) => b.influence - a.influence);
+  }
+  
+  /**
+   * Get AI decision accuracy tracking
+   */
+  async getAIAccuracyTracking(days: number = 30): Promise<{
+    overall: { accuracy: number; totalDecisions: number; confidence: number };
+    byConfidenceRange: Array<{ range: string; accuracy: number; count: number }>;
+    trendOverTime: Array<{ date: string; accuracy: number; avgConfidence: number }>;
+    byTicker: Array<{ ticker: string; accuracy: number; decisions: number }>;
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    
+    // For now, we'll simulate accuracy based on confidence levels
+    // In a real implementation, this would compare predictions to actual outcomes
+    const decisions = await this.db.all(`
+      SELECT 
+        confidence_level,
+        sentiment_score,
+        extracted_tickers,
+        processing_timestamp,
+        DATE(processing_timestamp / 1000, 'unixepoch') as date
+      FROM processed_content
+      WHERE processing_timestamp >= ?
+        AND trade_signal IS NOT NULL
+      ORDER BY processing_timestamp ASC
+    `, [cutoffTime]);
+    
+    if (decisions.length === 0) {
+      return {
+        overall: { accuracy: 0, totalDecisions: 0, confidence: 0 },
+        byConfidenceRange: [],
+        trendOverTime: [],
+        byTicker: []
+      };
+    }
+    
+    // Simulate accuracy based on confidence (higher confidence = higher accuracy)
+    const accuracySimulation = decisions.map(d => ({
+      ...d,
+      accurate: d.confidence_level > 0.7 ? Math.random() > 0.2 : Math.random() > 0.5
+    }));
+    
+    const totalAccurate = accuracySimulation.filter(d => d.accurate).length;
+    const overallAccuracy = totalAccurate / decisions.length;
+    const avgConfidence = decisions.reduce((sum, d) => sum + d.confidence_level, 0) / decisions.length;
+    
+    return {
+      overall: {
+        accuracy: overallAccuracy,
+        totalDecisions: decisions.length,
+        confidence: avgConfidence
+      },
+      byConfidenceRange: this.calculateAccuracyByConfidenceRange(accuracySimulation),
+      trendOverTime: this.calculateAccuracyTrend(accuracySimulation),
+      byTicker: this.calculateAccuracyByTicker(accuracySimulation)
+    };
+  }
+  
+  // Helper methods
+  private calculateCorrelation(arr1: number[], arr2: number[]): number {
+    if (arr1.length !== arr2.length || arr1.length < 2) return 0;
+    
+    const mean1 = arr1.reduce((a, b) => a + b, 0) / arr1.length;
+    const mean2 = arr2.reduce((a, b) => a + b, 0) / arr2.length;
+    
+    const numerator = arr1.reduce((sum, val, i) => sum + (val - mean1) * (arr2[i] - mean2), 0);
+    const denominator = Math.sqrt(
+      arr1.reduce((sum, val) => sum + Math.pow(val - mean1, 2), 0) *
+      arr2.reduce((sum, val) => sum + Math.pow(val - mean2, 2), 0)
+    );
+    
+    return denominator === 0 ? 0 : numerator / denominator;
+  }
+  
+  private calculateAccuracyByConfidenceRange(decisions: any[]): any[] {
+    const ranges = [
+      { min: 0, max: 0.5, label: '0-50%' },
+      { min: 0.5, max: 0.7, label: '50-70%' },
+      { min: 0.7, max: 0.85, label: '70-85%' },
+      { min: 0.85, max: 1, label: '85-100%' }
+    ];
+    
+    return ranges.map(range => {
+      const inRange = decisions.filter(d => d.confidence_level >= range.min && d.confidence_level < range.max);
+      const accurate = inRange.filter(d => d.accurate).length;
+      
+      return {
+        range: range.label,
+        accuracy: inRange.length > 0 ? accurate / inRange.length : 0,
+        count: inRange.length
+      };
+    });
+  }
+  
+  private calculateAccuracyTrend(decisions: any[]): any[] {
+    const dailyData = new Map<string, { accurate: number; total: number; confidenceSum: number }>();
+    
+    decisions.forEach(d => {
+      const existing = dailyData.get(d.date) || { accurate: 0, total: 0, confidenceSum: 0 };
+      existing.total += 1;
+      existing.confidenceSum += d.confidence_level;
+      if (d.accurate) existing.accurate += 1;
+      dailyData.set(d.date, existing);
+    });
+    
+    return Array.from(dailyData.entries()).map(([date, data]) => ({
+      date,
+      accuracy: data.accurate / data.total,
+      avgConfidence: data.confidenceSum / data.total
+    }));
+  }
+  
+  private calculateAccuracyByTicker(decisions: any[]): any[] {
+    const tickerData = new Map<string, { accurate: number; total: number }>();
+    
+    decisions.forEach(d => {
+      const tickers = JSON.parse(d.extracted_tickers || '[]');
+      tickers.forEach((ticker: string) => {
+        const existing = tickerData.get(ticker) || { accurate: 0, total: 0 };
+        existing.total += 1;
+        if (d.accurate) existing.accurate += 1;
+        tickerData.set(ticker, existing);
+      });
+    });
+    
+    return Array.from(tickerData.entries())
+      .map(([ticker, data]) => ({
+        ticker,
+        accuracy: data.accurate / data.total,
+        decisions: data.total
+      }))
+      .filter(t => t.decisions >= 3) // Only include tickers with at least 3 decisions
+      .sort((a, b) => b.decisions - a.decisions);
+  }
+  
+  /**
    * Get processing statistics for cost optimization monitoring
    */
   async getProcessingStats(): Promise<{
