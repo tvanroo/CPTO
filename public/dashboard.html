@@ -348,10 +348,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding: 15px;
+            margin-bottom: 6px;
+            padding: 6px;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            border-radius: 4px;
         }
         
         .total-balance {
@@ -359,10 +359,10 @@
         }
         
         .balance-value {
-            font-size: 2.5em;
+            font-size: 1.4em;
             font-weight: bold;
             color: #27ae60;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
         }
         
         .balance-label {
@@ -389,20 +389,21 @@
         }
         
         .balance-breakdown {
-            max-height: 200px;
+            max-height: 120px;
             overflow-y: auto;
-            margin-bottom: 15px;
+            margin-bottom: 6px;
         }
         
         .balance-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px;
-            margin-bottom: 8px;
+            padding: 4px;
+            margin-bottom: 2px;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            border-left: 4px solid #3498db;
+            border-radius: 3px;
+            border-left: 2px solid #3498db;
+            font-size: 0.8em;
         }
         
         .balance-currency {
@@ -570,12 +571,13 @@
         
         .cost-toggle {
             background: rgba(255, 255, 255, 0.1);
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
+            padding: 4px;
+            border-radius: 4px;
+            margin-bottom: 4px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 4px;
+            font-size: 0.8em;
         }
         
         .cost-breakdown {
@@ -623,9 +625,21 @@
         }
         
         .breakdown-meta {
-            font-size: 0.8em;
+            font-size: 0.7em;
             color: #7f8c8d;
             margin-left: 5px;
+        }
+        
+        .combined-section {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .section-half {
+            flex: 1;
+            padding: 4px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
         }
         
         @media (max-width: 768px) {
@@ -669,74 +683,89 @@
 
         <div class="status-grid">
             <div class="card">
-                <h3><i class="fas fa-cog"></i> Bot Status</h3>
-                <div class="api-status">
-                    <span class="api-name">Trading Bot</span>
-                    <span class="status-indicator" id="bot-status"></span>
-                </div>
-                <div id="bot-info">
-                    <p><strong>Status:</strong> <span id="bot-status-text">Loading...</span></p>
-                    <p><strong>Uptime:</strong> <span id="bot-uptime">-</span></p>
-                    <p><strong>Queue Size:</strong> <span id="queue-size">-</span></p>
-                </div>
-                <div class="control-buttons">
-                    <button class="btn btn-success" onclick="controlBot('start')">
-                        <i class="fas fa-play"></i> Start
-                    </button>
-                    <button class="btn btn-danger" onclick="controlBot('stop')">
-                        <i class="fas fa-stop"></i> Stop
-                    </button>
-                    <button class="btn btn-warning" onclick="controlBot('restart')">
-                        <i class="fas fa-redo"></i> Restart
-                    </button>
+                <h3><i class="fas fa-cog"></i> Bot Status & APIs</h3>
+                <div class="combined-section">
+                    <div class="section-half">
+                        <div class="api-status">
+                            <span class="api-name">Bot</span>
+                            <span class="status-indicator" id="bot-status"></span>
+                        </div>
+                        <div style="font-size: 0.7em; margin: 2px 0;">
+                            <strong>Status:</strong> <span id="bot-status-text">Loading...</span><br>
+                            <strong>Queue:</strong> <span id="queue-size">-</span>
+                        </div>
+                        <div class="control-buttons">
+                            <button class="btn btn-success" onclick="controlBot('start')">
+                                <i class="fas fa-play"></i> Start
+                            </button>
+                            <button class="btn btn-danger" onclick="controlBot('stop')">
+                                <i class="fas fa-stop"></i> Stop
+                            </button>
+                        </div>
+                    </div>
+                    <div class="section-half">
+                        <div class="api-status">
+                            <span class="api-name">OpenAI</span>
+                            <span class="status-indicator" id="openai-status"></span>
+                        </div>
+                        <div class="api-status">
+                            <span class="api-name">TokenMetrics</span>
+                            <span class="status-indicator" id="tokenmetrics-status"></span>
+                        </div>
+                        <div class="api-status">
+                            <span class="api-name">Gemini</span>
+                            <span class="status-indicator" id="gemini-status"></span>
+                        </div>
+                        <div class="control-buttons">
+                            <button class="btn" onclick="testAPI('all')">
+                                <i class="fas fa-check-circle"></i> Test
+                            </button>
+                        </div>
+                        <div style="margin-top: 4px; font-size: 0.7em;">
+                            <strong>Mode:</strong> <span id="trading-mode-text">Manual</span> |
+                            <strong>Gemini:</strong> <span id="mode-text">Production</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div class="card">
-                <h3><i class="fas fa-plug"></i> API Connections</h3>
-                <div class="api-status">
-                    <span class="api-name">OpenAI</span>
-                    <span class="status-indicator" id="openai-status"></span>
-                </div>
-                <div class="api-status">
-                    <span class="api-name">TokenMetrics</span>
-                    <span class="status-indicator" id="tokenmetrics-status"></span>
-                </div>
-                <div class="api-status">
-                    <span class="api-name">Gemini Exchange</span>
-                    <span class="status-indicator" id="gemini-status"></span>
-                </div>
-                <div class="control-buttons">
-                    <button class="btn" onclick="testAPI('all')">
-                        <i class="fas fa-check-circle"></i> Test All
-                    </button>
-                    <button class="btn" onclick="testAPI('openai')">
-                        <i class="fas fa-brain"></i> OpenAI
-                    </button>
-                    <button class="btn" onclick="testAPI('gemini')">
-                        <i class="fas fa-coins"></i> Gemini
-                    </button>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3><i class="fas fa-chart-line"></i> Trading Stats</h3>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-value" id="total-trades">-</div>
-                        <div class="stat-label">Total Trades</div>
+                <h3><i class="fas fa-chart-line"></i> Trading & Pending</h3>
+                <div class="combined-section">
+                    <div class="section-half">
+                        <h4 style="font-size: 0.8em; margin-bottom: 3px;">Stats</h4>
+                        <div class="stats-grid" style="grid-template-columns: 1fr 1fr; gap: 2px;">
+                            <div class="stat-item">
+                                <div class="stat-value" id="total-trades">-</div>
+                                <div class="stat-label">Trades</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="success-rate">-</div>
+                                <div class="stat-label">Success</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="successful-trades">-</div>
-                        <div class="stat-label">Successful</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="items-processed">-</div>
-                        <div class="stat-label">Items Processed</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="success-rate">-</div>
-                        <div class="stat-label">Success Rate</div>
+                    <div class="section-half">
+                        <h4 style="font-size: 0.8em; margin-bottom: 3px;">Pending</h4>
+                        <div class="stats-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 2px;">
+                            <div class="stat-item">
+                                <div class="stat-value" id="pending-count">0</div>
+                                <div class="stat-label">Queue</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="approved-count">0</div>
+                                <div class="stat-label">✓</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="rejected-count">0</div>
+                                <div class="stat-label">✗</div>
+                            </div>
+                        </div>
+                        <div class="control-buttons">
+                            <button class="btn" onclick="loadPendingTrades()">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -812,67 +841,6 @@
                 </div>
             </div>
             
-            <div class="card">
-                <h3><i class="fas fa-wrench"></i> Configuration</h3>
-                <div class="mode-toggle">
-                    <span>Trading Mode:</span>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="trading-mode-toggle" onchange="toggleTradingMode()">
-                        <span class="slider"></span>
-                    </label>
-                    <span id="trading-mode-text">Manual</span>
-                </div>
-                <div class="mode-toggle" style="margin-top: 10px;">
-                    <span>Gemini Mode:</span>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="sandbox-toggle" onchange="toggleSandboxMode()">
-                        <span class="slider"></span>
-                    </label>
-                    <span id="mode-text">Production</span>
-                </div>
-                <div class="control-buttons">
-                    <button class="btn" onclick="loadConfig()">
-                        <i class="fas fa-sync"></i> Refresh Config
-                    </button>
-                    <button class="btn btn-warning" onclick="pm2Action('restart')">
-                        <i class="fas fa-server"></i> PM2 Restart
-                    </button>
-                </div>
-            </div>
-            
-            <div class="card" id="pending-trades-card">
-                <h3><i class="fas fa-clock"></i> Pending Trades</h3>
-                <div class="trade-mode-info">
-                    <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="stat-value" id="pending-count">0</div>
-                            <div class="stat-label">Pending</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value" id="approved-count">0</div>
-                            <div class="stat-label">Approved Today</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value" id="rejected-count">0</div>
-                            <div class="stat-label">Rejected Today</div>
-                        </div>
-                    </div>
-                </div>
-                <div id="pending-trades-list">
-                    <div class="loading-text">No pending trades</div>
-                </div>
-                <div class="control-buttons">
-                    <button class="btn" onclick="loadPendingTrades()">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                    <button class="btn btn-success" onclick="bulkApproveTrades()" id="bulk-approve-btn" disabled>
-                        <i class="fas fa-check-double"></i> Approve All
-                    </button>
-                    <button class="btn btn-danger" onclick="bulkRejectTrades()" id="bulk-reject-btn" disabled>
-                        <i class="fas fa-times-circle"></i> Reject All
-                    </button>
-                </div>
-            </div>
         </div>
 
         <div class="logs-container">
