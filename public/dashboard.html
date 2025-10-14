@@ -692,7 +692,8 @@
                         </div>
                         <div style="font-size: 0.7em; margin: 2px 0;">
                             <strong>Status:</strong> <span id="bot-status-text">Loading...</span><br>
-                            <strong>Queue:</strong> <span id="queue-size">-</span>
+                            <strong>Queue:</strong> <span id="queue-size">-</span><br>
+                            <strong>Uptime:</strong> <span id="bot-uptime">-</span>
                         </div>
                         <div class="control-buttons">
                             <button class="btn btn-success" onclick="controlBot('start')">
@@ -737,11 +738,19 @@
                         <div class="stats-grid" style="grid-template-columns: 1fr 1fr; gap: 2px;">
                             <div class="stat-item">
                                 <div class="stat-value" id="total-trades">-</div>
-                                <div class="stat-label">Trades</div>
+                                <div class="stat-label">Total Trades</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="successful-trades">-</div>
+                                <div class="stat-label">Successful</div>
                             </div>
                             <div class="stat-item">
                                 <div class="stat-value" id="success-rate">-</div>
-                                <div class="stat-label">Success</div>
+                                <div class="stat-label">Success Rate</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="items-processed">-</div>
+                                <div class="stat-label">Items Processed</div>
                             </div>
                         </div>
                     </div>
@@ -1407,26 +1416,46 @@
 
         // Status update functions
         function updateBotStatus(status) {
-            if (status.isRunning !== undefined) {
-                botStatusIndicator.className = `status-indicator ${status.isRunning ? 'status-online' : 'status-offline'}`;
-                botStatusText.textContent = status.isRunning ? 'Running' : 'Stopped';
-                
-                if (status.stats) {
-                    document.getElementById('total-trades').textContent = status.stats.totalTradesExecuted || 0;
-                    document.getElementById('successful-trades').textContent = status.stats.successfulTrades || 0;
-                    document.getElementById('items-processed').textContent = status.stats.totalItemsProcessed || 0;
+            try {
+                if (status.isRunning !== undefined) {
+                    if (botStatusIndicator) {
+                        botStatusIndicator.className = `status-indicator ${status.isRunning ? 'status-online' : 'status-offline'}`;
+                    }
+                    if (botStatusText) {
+                        botStatusText.textContent = status.isRunning ? 'Running' : 'Stopped';
+                    }
                     
-                    const successRate = status.stats.totalTradesExecuted > 0 ? 
-                        Math.round((status.stats.successfulTrades / status.stats.totalTradesExecuted) * 100) : 0;
-                    document.getElementById('success-rate').textContent = successRate + '%';
+                    if (status.stats) {
+                        const totalTradesEl = document.getElementById('total-trades');
+                        if (totalTradesEl) totalTradesEl.textContent = status.stats.totalTradesExecuted || 0;
+                        
+                        const successfulTradesEl = document.getElementById('successful-trades');
+                        if (successfulTradesEl) successfulTradesEl.textContent = status.stats.successfulTrades || 0;
+                        
+                        const itemsProcessedEl = document.getElementById('items-processed');
+                        if (itemsProcessedEl) itemsProcessedEl.textContent = status.stats.totalItemsProcessed || 0;
+                        
+                        const successRateEl = document.getElementById('success-rate');
+                        if (successRateEl) {
+                            const successRate = status.stats.totalTradesExecuted > 0 ? 
+                                Math.round((status.stats.successfulTrades / status.stats.totalTradesExecuted) * 100) : 0;
+                            successRateEl.textContent = successRate + '%';
+                        }
+                    }
+                    
+                    const queueSizeEl = document.getElementById('queue-size');
+                    if (queueSizeEl) queueSizeEl.textContent = status.queueSize || 0;
+                    
+                    if (status.stats && status.stats.startTime) {
+                        const uptimeEl = document.getElementById('bot-uptime');
+                        if (uptimeEl) {
+                            const uptime = Math.floor((Date.now() - status.stats.startTime) / 1000);
+                            uptimeEl.textContent = formatUptime(uptime);
+                        }
+                    }
                 }
-                
-                document.getElementById('queue-size').textContent = status.queueSize || 0;
-                
-                if (status.stats && status.stats.startTime) {
-                    const uptime = Math.floor((Date.now() - status.stats.startTime) / 1000);
-                    document.getElementById('bot-uptime').textContent = formatUptime(uptime);
-                }
+            } catch (error) {
+                console.error('Bot status failed:', error);
             }
         }
 
@@ -1618,17 +1647,25 @@
         }
         
         function updatePendingTradesDisplay(trades, statistics, tradingMode) {
-            // Update statistics
-            document.getElementById('pending-count').textContent = statistics.pending || 0;
-            document.getElementById('approved-count').textContent = statistics.approved || 0;
-            document.getElementById('rejected-count').textContent = statistics.rejected || 0;
-            
-            // Update trading mode display
-            const pendingTradesCard = document.getElementById('pending-trades-card');
-            pendingTradesCard.setAttribute('data-mode', tradingMode);
-            
-            // Update trades list
-            const tradesList = document.getElementById('pending-trades-list');
+            try {
+                // Update statistics
+                const pendingCountEl = document.getElementById('pending-count');
+                if (pendingCountEl) pendingCountEl.textContent = statistics.pending || 0;
+                
+                const approvedCountEl = document.getElementById('approved-count');
+                if (approvedCountEl) approvedCountEl.textContent = statistics.approved || 0;
+                
+                const rejectedCountEl = document.getElementById('rejected-count');
+                if (rejectedCountEl) rejectedCountEl.textContent = statistics.rejected || 0;
+                
+                // Update trading mode display
+                const pendingTradesCard = document.getElementById('pending-trades-card');
+                if (pendingTradesCard) {
+                    pendingTradesCard.setAttribute('data-mode', tradingMode);
+                }
+                
+                // Update trades list
+                const tradesList = document.getElementById('pending-trades-list');
             
             if (trades && trades.length > 0) {
                 let tradesHTML = '';
