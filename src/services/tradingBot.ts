@@ -46,6 +46,7 @@ export class TradingBot extends EventEmitter {
   private maxQueueSize: number = 1000;
   private maxConcurrentProcessing: number = 3;
   private tickerCache: Map<string, string[]> = new Map(); // text -> tickers
+  private lastLogTime: number = 0; // For debug logging
 
   constructor() {
     super();
@@ -275,8 +276,16 @@ export class TradingBot extends EventEmitter {
    * Start the main processing loop
    */
   private startProcessingLoop(): void {
+    console.log('🔄 Starting processing loop...');
     const processNext = async () => {
       if (!this.isRunning) return;
+
+      // Log queue status every 10 seconds for debugging
+      const now = Date.now();
+      if (!this.lastLogTime || now - this.lastLogTime > 10000) {
+        console.log(`📋 Queue status: ${this.processingQueue.length} items queued, ${this.processingInProgress.size} processing`);
+        this.lastLogTime = now;
+      }
 
       // Process items if we have capacity
       while (
@@ -285,7 +294,10 @@ export class TradingBot extends EventEmitter {
       ) {
         const queueItem = this.processingQueue.shift();
         if (queueItem) {
-          this.processQueueItem(queueItem);
+          // Don't await - allow concurrent processing
+          this.processQueueItem(queueItem).catch(error => {
+            console.error('Unhandled error in processQueueItem:', error);
+          });
         }
       }
 
@@ -331,11 +343,14 @@ export class TradingBot extends EventEmitter {
    */
   private async processRedditItem(item: RedditItem): Promise<void> {
     const content = this.extractContent(item);
+    console.log(`🔍 Extracted content from ${item.id}: "${content.substring(0, 100)}..." (${content.length} chars)`);
+    
     if (!content || content.length < 10) {
+      console.log(`⏭️ Skipping ${item.id} - insufficient content (${content?.length || 0} chars)`);
       return; // Skip items with insufficient content
     }
 
-    console.log(`Processing ${item.id} from r/${item.subreddit}`);
+    console.log(`🔄 Processing ${item.id} from r/${item.subreddit}`);
 
     try {
       // Step 1: Extract crypto tickers from the content
