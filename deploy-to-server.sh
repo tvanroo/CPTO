@@ -74,10 +74,6 @@ run_remote "cd $SERVER_PATH && npm install"
 echo "4️⃣ Building TypeScript code..."
 run_remote "cd $SERVER_PATH && npm run build"
 
-# Run database migration after build
-echo "4.5️⃣ Running database migration..."
-run_remote "cd $SERVER_PATH && node migrate-db.js"
-
 echo "5️⃣ Starting main CPTO service..."
 run_remote "cd $SERVER_PATH && pm2 restart ecosystem.config.js --env production"
 
