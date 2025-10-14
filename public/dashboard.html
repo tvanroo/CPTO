@@ -848,8 +848,8 @@
                 <h3><i class="fas fa-terminal"></i> Live Logs</h3>
                 <div>
                     <button class="btn" onclick="toggleLogStreaming()">
-                        <i class="fas fa-play" id="log-toggle-icon"></i>
-                        <span id="log-toggle-text">Start Streaming</span>
+                        <i class="fas fa-pause" id="log-toggle-icon"></i>
+                        <span id="log-toggle-text">Stop Streaming</span>
                     </button>
                     <button class="btn" onclick="clearLogs()">
                         <i class="fas fa-trash"></i> Clear
@@ -859,7 +859,7 @@
             <div class="logs-content" id="logs-content">
                 <div class="log-entry log-info">
                     <span class="log-timestamp">[System]</span> 
-                    Dashboard loaded. Click "Start Streaming" to view live logs.
+                    Dashboard loaded. Log streaming starting automatically...
                 </div>
             </div>
         </div>
@@ -992,6 +992,8 @@
             loadPortfolioBalance();
             loadPendingTrades();
             loadCostData();
+            // Auto-start log streaming
+            toggleLogStreaming();
         }
 
         // Bot control functions
@@ -1144,13 +1146,18 @@
             const timestamp = new Date(log.timestamp).toLocaleTimeString();
             logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}${log.source ? ` - ${log.source}` : ''}]</span> ${log.message}`;
             
-            logsContent.appendChild(logEntry);
-            logsContent.scrollTop = logsContent.scrollHeight;
+            // Insert new logs at the top (after the first system message if it exists)
+            const firstEntry = logsContent.firstElementChild;
+            if (firstEntry && firstEntry.innerHTML.includes('[System]')) {
+                logsContent.insertBefore(logEntry, firstEntry.nextSibling);
+            } else {
+                logsContent.insertBefore(logEntry, firstEntry);
+            }
             
-            // Keep only last 1000 log entries
+            // Keep only last 1000 log entries (remove from bottom)
             const entries = logsContent.getElementsByClassName('log-entry');
             if (entries.length > 1000) {
-                logsContent.removeChild(entries[0]);
+                logsContent.removeChild(entries[entries.length - 1]);
             }
         }
 
