@@ -842,6 +842,94 @@
             </div>
             
         </div>
+        
+        <!-- New SQLite Analytics Sections -->
+        <div class="status-grid">
+            <!-- Processed Content Feed -->
+            <div class="card">
+                <h3><i class="fas fa-brain"></i> AI Processing Feed</h3>
+                <div style="max-height: 200px; overflow-y: auto; font-size: 0.8em;" id="processed-content-feed">
+                    <div class="loading-text">Loading processed content...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadProcessedContent()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn" onclick="toggleProcessedContentFeed()">
+                        <i class="fas fa-pause" id="feed-toggle-icon"></i>
+                        <span id="feed-toggle-text">Pause Feed</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Watchlist Dashboard -->
+            <div class="card">
+                <h3><i class="fas fa-eye"></i> Currency Watchlist</h3>
+                <div style="max-height: 200px; overflow-y: auto;" id="watchlist-container">
+                    <div class="loading-text">Loading watchlist...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadWatchlist()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn" onclick="showWatchlistDetails()">
+                        <i class="fas fa-info-circle"></i> Details
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-grid">
+            <!-- Cost Optimization Monitoring -->
+            <div class="card">
+                <h3><i class="fas fa-piggy-bank"></i> Cost Optimization</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="total-processed">0</div>
+                        <div class="stat-label">Processed</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="tokens-saved">0</div>
+                        <div class="stat-label">Tokens Saved</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="reuse-rate">0%</div>
+                        <div class="stat-label">Reuse Rate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="cost-saved">$0.00</div>
+                        <div class="stat-label">Cost Saved</div>
+                    </div>
+                </div>
+                <div style="margin-top: 6px; font-size: 0.8em;">
+                    <div style="background: rgba(255, 255, 255, 0.1); padding: 4px; border-radius: 4px;">
+                        <strong>Top Analyzed Tickers:</strong>
+                        <div id="top-tickers" style="color: #7f8c8d; margin-top: 2px;">Loading...</div>
+                    </div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadProcessingStats()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Trade Performance Panel -->
+            <div class="card">
+                <h3><i class="fas fa-chart-bar"></i> Trade Performance</h3>
+                <div style="max-height: 200px; overflow-y: auto;" id="trade-performance-container">
+                    <div class="loading-text">Loading trade performance...</div>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn" onclick="loadTradePerformance()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn" onclick="exportTradeData()">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <div class="logs-container">
             <div class="logs-header">
@@ -1015,6 +1103,13 @@
             loadPortfolioBalance();
             loadPendingTrades();
             loadCostData();
+            
+            // Load new analytics data
+            loadProcessedContent();
+            loadWatchlist();
+            loadProcessingStats();
+            loadTradePerformance();
+            
             // Auto-start log streaming
             toggleLogStreaming();
         }
@@ -1813,19 +1908,228 @@
             }
         }
         
+        // SQLite Analytics Functions
+        let isProcessedContentFeedActive = true;
+        
+        async function loadProcessedContent() {
+            try {
+                const response = await fetch('/api/analytics/processed-content?limit=20');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateProcessedContentFeed(data.content);
+                } else {
+                    throw new Error(data.error || 'Failed to load processed content');
+                }
+            } catch (error) {
+                console.error('Failed to load processed content:', error);
+                document.getElementById('processed-content-feed').innerHTML = 
+                    '<div class="loading-text">Error loading processed content</div>';
+            }
+        }
+        
+        function updateProcessedContentFeed(content) {
+            const container = document.getElementById('processed-content-feed');
+            
+            if (content && content.length > 0) {
+                let feedHTML = '';
+                content.forEach(item => {
+                    const timeAgo = getTimeAgo(item.processing_timestamp);
+                    const sentimentColor = item.sentiment_score > 0.3 ? '#27ae60' : 
+                                         item.sentiment_score < -0.3 ? '#e74c3c' : '#f39c12';
+                    
+                    feedHTML += `
+                        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 8px; margin-bottom: 6px; background: #f9f9f9;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <div style="font-weight: 600; color: #2c3e50;">
+                                    ${item.extracted_tickers.join(', ') || 'No tickers'} - r/${item.subreddit}
+                                </div>
+                                <div style="font-size: 0.7em; color: #7f8c8d;">${timeAgo}</div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <div style="color: ${sentimentColor}; font-weight: bold;">
+                                    Sentiment: ${item.sentiment_score.toFixed(2)} (${(item.confidence_level * 100).toFixed(0)}%)
+                                </div>
+                                <div style="font-size: 0.7em; background: #3498db; color: white; padding: 2px 6px; border-radius: 10px;">
+                                    ${item.type.toUpperCase()}
+                                </div>
+                            </div>
+                            <div style="font-size: 0.7em; color: #7f8c8d; background: rgba(255,255,255,0.7); padding: 4px; border-radius: 3px; border-left: 2px solid #3498db;">
+                                ${item.sentiment_reasoning.substring(0, 80)}${item.sentiment_reasoning.length > 80 ? '...' : ''}
+                            </div>
+                            ${item.trade_signal ? `<div style="margin-top: 4px; font-size: 0.7em; color: #e74c3c; font-weight: bold;">🚀 ${item.trade_signal.action} Signal</div>` : ''}
+                        </div>
+                    `;
+                });
+                container.innerHTML = feedHTML;
+            } else {
+                container.innerHTML = '<div class="loading-text">No processed content available</div>';
+            }
+        }
+        
+        function toggleProcessedContentFeed() {
+            isProcessedContentFeedActive = !isProcessedContentFeedActive;
+            const icon = document.getElementById('feed-toggle-icon');
+            const text = document.getElementById('feed-toggle-text');
+            
+            if (isProcessedContentFeedActive) {
+                icon.className = 'fas fa-pause';
+                text.textContent = 'Pause Feed';
+                loadProcessedContent(); // Resume loading
+            } else {
+                icon.className = 'fas fa-play';
+                text.textContent = 'Resume Feed';
+            }
+        }
+        
+        async function loadWatchlist() {
+            try {
+                const response = await fetch('/api/analytics/watchlist');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateWatchlistDisplay(data.watchlist);
+                } else {
+                    throw new Error(data.error || 'Failed to load watchlist');
+                }
+            } catch (error) {
+                console.error('Failed to load watchlist:', error);
+                document.getElementById('watchlist-container').innerHTML = 
+                    '<div class="loading-text">Error loading watchlist</div>';
+            }
+        }
+        
+        function updateWatchlistDisplay(watchlist) {
+            const container = document.getElementById('watchlist-container');
+            
+            if (watchlist && watchlist.length > 0) {
+                let watchlistHTML = '';
+                watchlist.forEach(item => {
+                    const trendIcon = item.sentiment_trend > 0 ? '📈' : item.sentiment_trend < 0 ? '📉' : '➡️';
+                    const sentimentColor = item.current_sentiment > 0.3 ? '#27ae60' : 
+                                         item.current_sentiment < -0.3 ? '#e74c3c' : '#f39c12';
+                    const lastUpdated = getTimeAgo(item.last_updated);
+                    
+                    watchlistHTML += `
+                        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 8px; margin-bottom: 4px; background: #f9f9f9;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-weight: 600; color: #2c3e50; font-size: 1em;">
+                                    ${item.ticker} ${trendIcon}
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="color: ${sentimentColor}; font-weight: bold;">
+                                        ${item.current_sentiment.toFixed(2)}
+                                    </div>
+                                    <div style="font-size: 0.7em; color: #7f8c8d;">
+                                        ${item.mention_count} mentions
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 4px; display: flex; justify-content: space-between; font-size: 0.7em; color: #7f8c8d;">
+                                <span>Confidence: ${(item.confidence_avg * 100).toFixed(0)}%</span>
+                                <span>Updated: ${lastUpdated}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = watchlistHTML;
+            } else {
+                container.innerHTML = '<div class="loading-text">No watchlist items available</div>';
+            }
+        }
+        
+        async function loadProcessingStats() {
+            try {
+                const response = await fetch('/api/analytics/processing-stats');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateProcessingStatsDisplay(data);
+                } else {
+                    throw new Error(data.error || 'Failed to load processing stats');
+                }
+            } catch (error) {
+                console.error('Failed to load processing stats:', error);
+            }
+        }
+        
+        function updateProcessingStatsDisplay(stats) {
+            document.getElementById('total-processed').textContent = stats.totalProcessed || '0';
+            document.getElementById('tokens-saved').textContent = formatNumber(stats.totalTokensSaved || 0);
+            
+            // Calculate reuse rate
+            const reuseRate = stats.totalProcessed > 0 ? (stats.totalTokensSaved / (stats.totalTokensUsed + stats.totalTokensSaved)) * 100 : 0;
+            document.getElementById('reuse-rate').textContent = `${reuseRate.toFixed(1)}%`;
+            
+            // Estimate cost saved (rough calculation)
+            const avgCostPerToken = 0.00002; // Approximate
+            const costSaved = (stats.totalTokensSaved || 0) * avgCostPerToken;
+            document.getElementById('cost-saved').textContent = `$${costSaved.toFixed(4)}`;
+            
+            // Update top tickers
+            const topTickersElement = document.getElementById('top-tickers');
+            if (stats.topTickers && stats.topTickers.length > 0) {
+                const topTickersText = stats.topTickers.slice(0, 5).map(t => `${t.ticker} (${t.mentions})`).join(', ');
+                topTickersElement.textContent = topTickersText;
+            } else {
+                topTickersElement.textContent = 'No data available';
+            }
+        }
+        
+        async function loadTradePerformance() {
+            // For now, we'll use the existing trade performance data
+            // In the future, this could be enhanced with the SQLite stored performance data
+            document.getElementById('trade-performance-container').innerHTML = 
+                '<div class="loading-text">Trade performance analysis coming soon...</div>';
+        }
+        
+        function showWatchlistDetails() {
+            showNotification('Detailed watchlist analysis coming soon', 'info');
+        }
+        
+        function exportTradeData() {
+            showNotification('Export functionality coming soon', 'info');
+        }
+        
+        // Helper functions
+        function getTimeAgo(timestamp) {
+            const now = Date.now();
+            const diff = now - timestamp;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            
+            if (days > 0) return `${days}d ago`;
+            if (hours > 0) return `${hours}h ago`;
+            return `${minutes}m ago`;
+        }
+        
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+        
         // Auto-refresh data with different intervals
         setInterval(() => {
             if (socket.connected) {
                 controlBot('status');
                 loadPendingTrades(); // Refresh pending trades frequently
                 loadCostData(); // Refresh cost data frequently
+                
+                // Refresh analytics data frequently
+                if (isProcessedContentFeedActive) {
+                    loadProcessedContent();
+                }
+                loadProcessingStats();
             }
         }, 30000);
         
-        // Refresh portfolio less frequently (every 5 minutes)
+        // Refresh portfolio and watchlist less frequently (every 5 minutes)
         setInterval(() => {
             if (socket.connected) {
                 loadPortfolioBalance();
+                loadWatchlist();
             }
         }, 300000);
     </script>

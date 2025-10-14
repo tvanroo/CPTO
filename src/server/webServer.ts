@@ -15,6 +15,7 @@ import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
 import { costTrackingService } from '../services/costTrackingService';
+import { dataStorageService } from '../services/dataStorageService';
 
 /**
  * Web server for CPTO Dashboard
@@ -609,6 +610,113 @@ export class WebServer {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // SQLite Data Analytics Endpoints
+    
+    // Get recent processed content
+    this.app.get('/api/analytics/processed-content', async (req, res) => {
+      try {
+        const limit = parseInt(req.query.limit as string) || 50;
+        const content = await dataStorageService.getRecentProcessedContent(limit);
+        
+        res.json({
+          content,
+          count: content.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get currency watchlist with scores
+    this.app.get('/api/analytics/watchlist', async (_req, res) => {
+      try {
+        const watchlist = await dataStorageService.getCurrencyWatchlist();
+        
+        res.json({
+          watchlist,
+          count: watchlist.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get sentiment trends for a ticker
+    this.app.get('/api/analytics/sentiment-trends/:ticker', async (req, res) => {
+      try {
+        const { ticker } = req.params;
+        const days = parseInt(req.query.days as string) || 7;
+        const data = await dataStorageService.getHistoricalContext(ticker.toUpperCase(), days);
+        
+        res.json({
+          ticker: ticker.toUpperCase(),
+          days,
+          recentAnalysis: data.recentAnalysis,
+          tradeHistory: data.tradeHistory,
+          sentimentTrend: data.sentimentTrend,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get analysis for specific ticker
+    this.app.get('/api/analytics/ticker/:ticker/analysis', async (req, res) => {
+      try {
+        const { ticker } = req.params;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const analysis = await dataStorageService.getRecentAnalysisForTicker(ticker.toUpperCase(), limit);
+        
+        res.json({
+          ticker: ticker.toUpperCase(),
+          analysis,
+          count: analysis.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get processing statistics and cost savings
+    this.app.get('/api/analytics/processing-stats', async (_req, res) => {
+      try {
+        const stats = await dataStorageService.getProcessingStats();
+        
+        res.json({
+          ...stats,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get historical analysis context (general overview)
+    this.app.get('/api/analytics/overview', async (req, res) => {
+      try {
+        const days = parseInt(req.query.days as string) || 7;
+        const overview = await dataStorageService.getHistoricalContext(undefined, days);
+        
+        res.json({
+          days,
+          overview,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
       }
     });
   }

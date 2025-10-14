@@ -510,6 +510,44 @@ export class DataStorageService {
   }
 
   /**
+   * Get processing statistics for cost optimization monitoring
+   */
+  async getProcessingStats(): Promise<{
+    totalProcessed: number;
+    totalTokensUsed: number;
+    totalTokensSaved: number;
+    avgConfidence: number;
+    topTickers: Array<{ ticker: string; mentions: number }>;
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const totalProcessed = await this.db.get(`SELECT COUNT(*) as count FROM processed_content`);
+    
+    const tokenStats = await this.db.get(`
+      SELECT 
+        SUM(reuse_count) as total_saved,
+        AVG(confidence_level) as avg_confidence
+      FROM processed_content
+    `);
+
+    // Get top mentioned tickers
+    const tickerRows = await this.db.all(`
+      SELECT ticker, mention_count as mentions 
+      FROM currency_watchlist 
+      ORDER BY mention_count DESC 
+      LIMIT 10
+    `);
+
+    return {
+      totalProcessed: totalProcessed.count || 0,
+      totalTokensUsed: 0, // We don't track individual token usage in this service
+      totalTokensSaved: tokenStats.total_saved || 0,
+      avgConfidence: tokenStats.avg_confidence || 0,
+      topTickers: tickerRows || []
+    };
+  }
+
+  /**
    * Clean up old data to manage database size
    */
   async cleanup(daysToKeep: number = 30): Promise<void> {
