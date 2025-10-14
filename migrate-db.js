@@ -1,4 +1,4 @@
-const { dataStorageService } = require('./build/src/services/dataStorageService.js');
+const { dataStorageService } = require('./build/services/dataStorageService.js');
 
 (async () => {
   try {
