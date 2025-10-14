@@ -5,10 +5,15 @@
  */
 
 import { webServer } from './server/webServer';
+import { dataStorageService } from './services/dataStorageService';
 
 async function startDashboard() {
   try {
     console.log('🌐 Starting CPTO Web Dashboard...');
+    
+    // Initialize data storage service first
+    console.log('📊 Initializing data storage service...');
+    await dataStorageService.initialize();
     
     await webServer.start();
     
