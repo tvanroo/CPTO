@@ -1088,22 +1088,27 @@
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
-        // Socket.IO connection - Force HTTP with polling only
-        const protocol = 'http:';
+        // Socket.IO connection - Auto-detect protocol and configure for remote access
+        const protocol = window.location.protocol;
         const host = window.location.hostname;
-        const port = '4000'; // Hard-coded port
+        const port = window.location.port || (protocol === 'https:' ? '443' : '4000');
         const socketUrl = `${protocol}//${host}:${port}`;
         
         console.log('Connecting to Socket.IO at:', socketUrl);
+        console.log('Protocol:', protocol, 'Host:', host, 'Port:', port);
         
         const socket = io(socketUrl, {
-            transports: ['polling'], // Only use polling, no WebSocket
-            forceNew: true,
+            transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
+            forceNew: false,
             reconnection: true,
-            timeout: 10000,
-            secure: false,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            timeout: 20000,
+            secure: protocol === 'https:',
             rejectUnauthorized: false,
-            upgrade: false // Prevent upgrading to WebSocket
+            upgrade: true, // Allow upgrading to WebSocket
+            autoConnect: true,
+            withCredentials: false
         });
         let isLogStreaming = false;
 
@@ -1114,13 +1119,38 @@
 
         // Connect to server
         socket.on('connect', () => {
-            console.log('Connected to CPTO Dashboard');
+            console.log('✅ Connected to CPTO Dashboard');
             showNotification('Connected to dashboard', 'success');
             loadInitialData();
         });
+        
+        socket.on('connect_error', (error) => {
+            console.error('❌ Socket.IO connection error:', error.message);
+            showNotification(`Connection failed: ${error.message}`, 'error');
+        });
+        
+        socket.on('reconnect', (attemptNumber) => {
+            console.log(`🔄 Reconnected to dashboard (attempt ${attemptNumber})`);
+            showNotification('Reconnected to dashboard', 'success');
+            loadInitialData();
+        });
+        
+        socket.on('reconnect_error', (error) => {
+            console.error('❌ Reconnection error:', error.message);
+            showNotification('Reconnection failed', 'error');
+        });
+        
+        socket.on('reconnect_failed', () => {
+            console.error('❌ Failed to reconnect after multiple attempts');
+            showNotification('Connection lost - please refresh the page', 'error');
+        });
 
-        socket.on('disconnect', () => {
-            console.log('Disconnected from dashboard');
+        socket.on('disconnect', (reason) => {
+            console.log('⚠️  Disconnected from dashboard:', reason);
+            if (reason === 'io server disconnect') {
+                // Server initiated disconnect, try to reconnect
+                socket.connect();
+            }
             showNotification('Disconnected from dashboard', 'error');
         });
 

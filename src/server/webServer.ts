@@ -36,8 +36,12 @@ export class WebServer {
     this.io = new SocketIOServer(this.server, {
       cors: {
         origin: "*",
-        methods: ["GET", "POST"]
-      }
+        methods: ["GET", "POST", "PUT", "DELETE"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+        credentials: false
+      },
+      allowEIO3: true,
+      transports: ['websocket', 'polling']
     });
 
     this.setupMiddleware();
@@ -55,14 +59,33 @@ export class WebServer {
       contentSecurityPolicy: false, // Disable CSP entirely
     }));
 
-    // CORS
-    this.app.use(cors());
+    // CORS - Allow all origins for dashboard access
+    this.app.use(cors({
+      origin: true, // Allow all origins
+      credentials: false,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    }));
 
-    // Rate limiting
+    // Rate limiting - More generous for dashboard usage
     const limiter = rateLimit({
       windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 100, // Limit each IP to 100 requests per windowMs
-      message: 'Too many requests from this IP'
+      max: 500, // Increased limit for dashboard usage with auto-refresh
+      message: {
+        error: 'Too many requests from this IP',
+        retryAfter: '15 minutes',
+        limit: 500
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+      // Skip rate limiting for certain endpoints
+      skip: (req) => {
+        // Skip rate limiting for static assets
+        return req.path.startsWith('/static/') || 
+               req.path.endsWith('.css') || 
+               req.path.endsWith('.js') || 
+               req.path.endsWith('.ico')
+      }
     });
     this.app.use(limiter);
 
