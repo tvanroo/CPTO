@@ -859,7 +859,25 @@ export class WebServer {
       });
     });
     
+    // Listen for portfolio refresh requests
+    tradingBot.on('portfolioRefreshNeeded', (data) => {
+      this.io.emit('portfolioRefreshNeeded', {
+        reason: data.reason || 'Trading analysis',
+        timestamp: new Date().toISOString()
+      });
+    });
+    
     console.log('✅ Trading bot and pending trades event listeners setup complete');
+  }
+  
+  /**
+   * Trigger portfolio refresh for all connected clients
+   */
+  public triggerPortfolioRefresh(reason: string = 'Manual request'): void {
+    this.io.emit('portfolioRefreshNeeded', {
+      reason,
+      timestamp: new Date().toISOString()
+    });
   }
 
   /**

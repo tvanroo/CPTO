@@ -950,8 +950,17 @@
                 timestamp: new Date().toISOString()
             });
             
-            // Refresh portfolio balance after trade
-            setTimeout(() => loadPortfolioBalance(), 2000);
+            // Refresh portfolio balance after successful trade (longer delay for settlement)
+            if (data.status === 'completed') {
+                setTimeout(() => {
+                    loadPortfolioBalance();
+                    addLogEntry({
+                        level: 'info',
+                        message: '💰 Portfolio balance updated after trade execution',
+                        timestamp: new Date().toISOString()
+                    });
+                }, 5000); // Wait 5 seconds for trade settlement
+            }
         });
         
         socket.on('notification', (data) => {
@@ -967,6 +976,8 @@
         socket.on('tradeApproved', (data) => {
             showNotification(data.message, 'success');
             loadPendingTrades(); // Refresh pending trades list
+            // Refresh portfolio when a trade gets approved (execution imminent)
+            setTimeout(() => loadPortfolioBalance(), 3000);
         });
         
         socket.on('tradeRejected', (data) => {
@@ -982,6 +993,18 @@
         socket.on('bulkTradeProcessed', (data) => {
             showNotification(data.message, 'info');
             loadPendingTrades(); // Refresh pending trades list
+            // Refresh portfolio after bulk trade processing
+            setTimeout(() => loadPortfolioBalance(), 4000);
+        });
+        
+        // Strategic portfolio refresh (triggered by trading analysis)
+        socket.on('portfolioRefreshNeeded', (data) => {
+            addLogEntry({
+                level: 'info',
+                message: `📊 Refreshing portfolio for trading analysis: ${data.reason || 'Strategic update'}`,
+                timestamp: new Date().toISOString()
+            });
+            loadPortfolioBalance();
         });
 
         // Initial data loading
@@ -1246,7 +1269,12 @@
                         balanceBreakdown.innerHTML = '<div class="loading-text">No balances found</div>';
                     }
                     
-                    showNotification('Portfolio balance updated', 'success');
+                    // Only show notification for manual refreshes, not automatic ones
+                    const now = Date.now();
+                    if (!window.lastPortfolioUpdate || now - window.lastPortfolioUpdate > 60000) {
+                        showNotification('Portfolio balance updated', 'success');
+                    }
+                    window.lastPortfolioUpdate = now;
                 } else {
                     throw new Error(data.error || 'Failed to load portfolio balance');
                 }
@@ -1785,15 +1813,21 @@
             }
         }
         
-        // Auto-refresh data every 30 seconds
+        // Auto-refresh data with different intervals
         setInterval(() => {
             if (socket.connected) {
                 controlBot('status');
-                loadPortfolioBalance(); // Also refresh portfolio data
-                loadPendingTrades(); // Also refresh pending trades
-                loadCostData(); // Also refresh cost data
+                loadPendingTrades(); // Refresh pending trades frequently
+                loadCostData(); // Refresh cost data frequently
             }
         }, 30000);
+        
+        // Refresh portfolio less frequently (every 5 minutes)
+        setInterval(() => {
+            if (socket.connected) {
+                loadPortfolioBalance();
+            }
+        }, 300000);
     </script>
 </body>
 </html>
