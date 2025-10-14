@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPTO - Backtesting & Analytics Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .nav {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+
+        .nav button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav button.active,
+        .nav button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .card h3 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: transform 0.2s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .metric-value {
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .positive {
+            color: #48bb78;
+        }
+
+        .negative {
+            color: #f56565;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border-left: 4px solid #f56565;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .trades-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .trades-table th,
+        .trades-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .trades-table th {
+            background: #edf2f7;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .preset-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .preset-card {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .preset-card:hover,
+        .preset-card.selected {
+            border-color: #667eea;
+            background: #ebf4ff;
+        }
+
+        .preset-card h4 {
+            color: #4a5568;
+            margin-bottom: 8px;
+        }
+
+        .preset-card p {
+            color: #718096;
+            font-size: 13px;
+        }
+
+        .chart-placeholder {
+            width: 100%;
+            height: 200px;
+            background: #f7fafc;
+            border: 2px dashed #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #718096;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 CPTO Analytics</h1>
+            <p>Backtesting & Strategy Optimization</p>
+        </div>
+
+        <div class="nav">
+            <button class="nav-btn active" data-section="backtest">Run Backtest</button>
+            <button class="nav-btn" data-section="optimize">Optimize Strategy</button>
+            <button class="nav-btn" data-section="compare">Compare Strategies</button>
+            <button class="nav-btn" data-section="momentum">Sentiment Momentum</button>
+        </div>
+
+        <div class="dashboard">
+            <!-- Run Backtest Section -->
+            <div id="backtest-section" class="section active">
+                <div class="card">
+                    <h3>🔄 Run Backtest</h3>
+                    
+                    <div class="preset-cards" id="presets-container">
+                        <!-- Presets will be loaded here -->
+                    </div>
+
+                    <form id="backtest-form">
+                        <div class="form-group">
+                            <label for="ticker">Ticker (optional - leave empty for all):</label>
+                            <input type="text" id="ticker" placeholder="BTC, ETH, ADA...">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="startDate">Start Date:</label>
+                            <input type="date" id="startDate" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="endDate">End Date:</label>
+                            <input type="date" id="endDate" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="initialBalance">Initial Balance ($):</label>
+                            <input type="number" id="initialBalance" value="10000" min="100" step="100">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="tradeAmount">Trade Amount ($):</label>
+                            <input type="number" id="tradeAmount" value="100" min="10" step="10">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sentimentThreshold">Sentiment Threshold:</label>
+                            <input type="range" id="sentimentThreshold" min="0" max="1" step="0.1" value="0.3">
+                            <span id="sentimentValue">0.3</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="confidenceThreshold">Confidence Threshold:</label>
+                            <input type="range" id="confidenceThreshold" min="0" max="1" step="0.1" value="0.7">
+                            <span id="confidenceValue">0.7</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="maxTradesPerDay">Max Trades Per Day:</label>
+                            <input type="number" id="maxTradesPerDay" value="5" min="1" max="50">
+                        </div>
+
+                        <button type="submit" class="btn">Run Backtest</button>
+                    </form>
+
+                    <div id="backtest-results"></div>
+                </div>
+            </div>
+
+            <!-- Optimize Strategy Section -->
+            <div id="optimize-section" class="section">
+                <div class="card">
+                    <h3>🔧 Optimize Strategy</h3>
+                    
+                    <form id="optimize-form">
+                        <div class="form-group">
+                            <label for="opt-parameter">Parameter to Optimize:</label>
+                            <select id="opt-parameter" required>
+                                <option value="sentimentThreshold">Sentiment Threshold</option>
+                                <option value="confidenceThreshold">Confidence Threshold</option>
+                                <option value="maxTradesPerDay">Max Trades Per Day</option>
+                                <option value="tradeAmountUSD">Trade Amount</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="opt-values">Values to Test (comma-separated):</label>
+                            <input type="text" id="opt-values" placeholder="0.1,0.2,0.3,0.4,0.5" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="opt-startDate">Start Date:</label>
+                            <input type="date" id="opt-startDate" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="opt-endDate">End Date:</label>
+                            <input type="date" id="opt-endDate" required>
+                        </div>
+
+                        <button type="submit" class="btn">Optimize Strategy</button>
+                    </form>
+
+                    <div id="optimize-results"></div>
+                </div>
+            </div>
+
+            <!-- Compare Strategies Section -->
+            <div id="compare-section" class="section">
+                <div class="card">
+                    <h3>📊 Compare Strategies</h3>
+                    
+                    <div id="strategies-container">
+                        <div class="strategy-config">
+                            <h4>Strategy 1: Conservative</h4>
+                            <input type="text" placeholder="Strategy Name" value="Conservative">
+                            <!-- Strategy config inputs would go here -->
+                        </div>
+                    </div>
+
+                    <button class="btn" onclick="addStrategy()">Add Strategy</button>
+                    <button class="btn" onclick="compareStrategies()">Compare Strategies</button>
+
+                    <div id="compare-results"></div>
+                </div>
+            </div>
+
+            <!-- Sentiment Momentum Section -->
+            <div id="momentum-section" class="section">
+                <div class="card">
+                    <h3>📈 Sentiment Momentum Analysis</h3>
+                    
+                    <form id="momentum-form">
+                        <div class="form-group">
+                            <label for="momentum-ticker">Ticker:</label>
+                            <input type="text" id="momentum-ticker" placeholder="BTC" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="momentum-days">Analysis Period (days):</label>
+                            <input type="number" id="momentum-days" value="30" min="7" max="90">
+                        </div>
+
+                        <button type="submit" class="btn">Analyze Momentum</button>
+                    </form>
+
+                    <div id="momentum-results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update active nav button
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Show corresponding section
+                document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+                document.getElementById(btn.dataset.section + '-section').classList.add('active');
+            });
+        });
+
+        // Load presets on page load
+        loadPresets();
+
+        // Form handlers
+        document.getElementById('backtest-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await runBacktest();
+        });
+
+        document.getElementById('optimize-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await optimizeStrategy();
+        });
+
+        document.getElementById('momentum-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await analyzeMomentum();
+        });
+
+        // Range sliders
+        document.getElementById('sentimentThreshold').addEventListener('input', (e) => {
+            document.getElementById('sentimentValue').textContent = e.target.value;
+        });
+
+        document.getElementById('confidenceThreshold').addEventListener('input', (e) => {
+            document.getElementById('confidenceValue').textContent = e.target.value;
+        });
+
+        // Set default dates (last 30 days)
+        const today = new Date();
+        const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        
+        document.getElementById('endDate').value = today.toISOString().split('T')[0];
+        document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+        document.getElementById('opt-endDate').value = today.toISOString().split('T')[0];
+        document.getElementById('opt-startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+
+        // Load presets
+        async function loadPresets() {
+            try {
+                const response = await fetch('/api/backtesting/presets');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayPresets(data.presets);
+                }
+            } catch (error) {
+                console.error('Error loading presets:', error);
+            }
+        }
+
+        function displayPresets(presets) {
+            const container = document.getElementById('presets-container');
+            container.innerHTML = '';
+
+            Object.entries(presets).forEach(([key, preset]) => {
+                const card = document.createElement('div');
+                card.className = 'preset-card';
+                card.dataset.preset = key;
+                card.innerHTML = `
+                    <h4>${preset.name}</h4>
+                    <p>${preset.description}</p>
+                `;
+                
+                card.addEventListener('click', () => {
+                    // Remove previous selection
+                    document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+                    
+                    // Apply preset to form
+                    applyPreset(preset.config);
+                });
+                
+                container.appendChild(card);
+            });
+        }
+
+        function applyPreset(config) {
+            document.getElementById('startDate').value = new Date(config.startDate).toISOString().split('T')[0];
+            document.getElementById('endDate').value = new Date(config.endDate).toISOString().split('T')[0];
+            document.getElementById('initialBalance').value = config.initialBalance;
+            document.getElementById('tradeAmount').value = config.tradeAmountUSD;
+            document.getElementById('sentimentThreshold').value = config.sentimentThreshold;
+            document.getElementById('sentimentValue').textContent = config.sentimentThreshold;
+            document.getElementById('confidenceThreshold').value = config.confidenceThreshold;
+            document.getElementById('confidenceValue').textContent = config.confidenceThreshold;
+            document.getElementById('maxTradesPerDay').value = config.maxTradesPerDay;
+        }
+
+        async function runBacktest() {
+            const resultsDiv = document.getElementById('backtest-results');
+            resultsDiv.innerHTML = '<div class="loading">Running backtest...</div>';
+
+            const formData = new FormData(document.getElementById('backtest-form'));
+            const data = {
+                ticker: formData.get('ticker') || undefined,
+                startDate: formData.get('startDate'),
+                endDate: formData.get('endDate'),
+                initialBalance: parseInt(formData.get('initialBalance')),
+                tradeAmountUSD: parseInt(formData.get('tradeAmount')),
+                sentimentThreshold: parseFloat(formData.get('sentimentThreshold')),
+                confidenceThreshold: parseFloat(formData.get('confidenceThreshold')),
+                maxTradesPerDay: parseInt(formData.get('maxTradesPerDay'))
+            };
+
+            try {
+                const response = await fetch('/api/backtesting/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    displayBacktestResults(result.backtest);
+                } else {
+                    resultsDiv.innerHTML = `<div class="error">Error: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function displayBacktestResults(backtest) {
+            const { performance, trades } = backtest;
+            const resultsDiv = document.getElementById('backtest-results');
+
+            resultsDiv.innerHTML = `
+                <div class="results">
+                    <h4>📊 Performance Results</h4>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Total Trades</span>
+                        <span class="metric-value">${performance.totalTrades}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Win Rate</span>
+                        <span class="metric-value ${performance.winRate >= 50 ? 'positive' : 'negative'}">${performance.winRate.toFixed(1)}%</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Total P&L</span>
+                        <span class="metric-value ${performance.totalPnLPercent >= 0 ? 'positive' : 'negative'}">${performance.totalPnLPercent.toFixed(2)}%</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Final Balance</span>
+                        <span class="metric-value">$${performance.finalBalance.toLocaleString()}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Sharpe Ratio</span>
+                        <span class="metric-value">${performance.sharpeRatio.toFixed(3)}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Max Drawdown</span>
+                        <span class="metric-value negative">${performance.maxDrawdown.toFixed(2)}%</span>
+                    </div>
+
+                    <div class="chart-placeholder">
+                        📈 Performance Timeline Chart
+                        <br><small>(Chart visualization would be implemented here)</small>
+                    </div>
+                    
+                    <h4 style="margin-top: 20px;">Recent Trades</h4>
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        <table class="trades-table">
+                            <thead>
+                                <tr>
+                                    <th>Ticker</th>
+                                    <th>Action</th>
+                                    <th>Date</th>
+                                    <th>P&L</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${trades.slice(-10).map(trade => `
+                                    <tr>
+                                        <td>${trade.ticker}</td>
+                                        <td>${trade.action}</td>
+                                        <td>${new Date(trade.timestamp).toLocaleDateString()}</td>
+                                        <td class="${trade.pnl >= 0 ? 'positive' : 'negative'}">
+                                            ${trade.pnlPercent.toFixed(2)}%
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function optimizeStrategy() {
+            const resultsDiv = document.getElementById('optimize-results');
+            resultsDiv.innerHTML = '<div class="loading">Optimizing strategy...</div>';
+
+            const parameter = document.getElementById('opt-parameter').value;
+            const valuesStr = document.getElementById('opt-values').value;
+            const values = valuesStr.split(',').map(v => parseFloat(v.trim()));
+
+            const data = {
+                parameter,
+                values,
+                startDate: document.getElementById('opt-startDate').value,
+                endDate: document.getElementById('opt-endDate').value
+            };
+
+            try {
+                const response = await fetch('/api/backtesting/optimize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    displayOptimizationResults(result.optimization);
+                } else {
+                    resultsDiv.innerHTML = `<div class="error">Error: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function displayOptimizationResults(optimization) {
+            const resultsDiv = document.getElementById('optimize-results');
+            const { parameter, results, optimal } = optimization;
+
+            resultsDiv.innerHTML = `
+                <div class="results">
+                    <h4>🎯 Optimization Results</h4>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Parameter</span>
+                        <span class="metric-value">${parameter}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Optimal Value</span>
+                        <span class="metric-value positive">${optimal.value}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Best Sharpe Ratio</span>
+                        <span class="metric-value">${optimal.score.toFixed(3)}</span>
+                    </div>
+
+                    <div class="chart-placeholder">
+                        📊 Optimization Results Chart
+                        <br><small>(Parameter vs Performance visualization)</small>
+                    </div>
+                    
+                    <h4 style="margin-top: 20px;">All Results</h4>
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        <table class="trades-table">
+                            <thead>
+                                <tr>
+                                    <th>Value</th>
+                                    <th>Win Rate</th>
+                                    <th>Total P&L</th>
+                                    <th>Sharpe</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${results.map(r => `
+                                    <tr>
+                                        <td>${r.value}</td>
+                                        <td class="${r.winRate >= 50 ? 'positive' : 'negative'}">${r.winRate.toFixed(1)}%</td>
+                                        <td class="${r.totalPnL >= 0 ? 'positive' : 'negative'}">${r.totalPnL.toFixed(2)}%</td>
+                                        <td>${r.sharpeRatio.toFixed(3)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function analyzeMomentum() {
+            const resultsDiv = document.getElementById('momentum-results');
+            resultsDiv.innerHTML = '<div class="loading">Analyzing sentiment momentum...</div>';
+
+            const ticker = document.getElementById('momentum-ticker').value.toUpperCase();
+            const days = document.getElementById('momentum-days').value;
+
+            try {
+                const response = await fetch(`/api/backtesting/sentiment-momentum/${ticker}?days=${days}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    displayMomentumResults(result.analysis);
+                } else {
+                    resultsDiv.innerHTML = `<div class="error">Error: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function displayMomentumResults(analysis) {
+            const resultsDiv = document.getElementById('momentum-results');
+            const { patterns } = analysis;
+
+            resultsDiv.innerHTML = `
+                <div class="results">
+                    <h4>📈 Sentiment Momentum Analysis</h4>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Bullish Momentum Trades</span>
+                        <span class="metric-value">${patterns.bullishMomentum.trades}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Bullish Accuracy</span>
+                        <span class="metric-value positive">${(patterns.bullishMomentum.accuracy * 100).toFixed(1)}%</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Bearish Momentum Trades</span>
+                        <span class="metric-value">${patterns.bearishMomentum.trades}</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Bearish Accuracy</span>
+                        <span class="metric-value positive">${(patterns.bearishMomentum.accuracy * 100).toFixed(1)}%</span>
+                    </div>
+                    
+                    <div class="metric">
+                        <span class="metric-label">Reversal Signals</span>
+                        <span class="metric-value">${patterns.reversalSignals.length}</span>
+                    </div>
+
+                    <div class="chart-placeholder">
+                        📊 Momentum Timeline Chart
+                        <br><small>(Sentiment momentum over time)</small>
+                    </div>
+                    
+                    ${patterns.reversalSignals.length > 0 ? `
+                        <h4 style="margin-top: 20px;">Reversal Signals</h4>
+                        <div style="max-height: 200px; overflow-y: auto;">
+                            <table class="trades-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Signal</th>
+                                        <th>Accuracy</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${patterns.reversalSignals.map(signal => `
+                                        <tr>
+                                            <td>${signal.date}</td>
+                                            <td>${signal.signal.replace('_', ' ').toUpperCase()}</td>
+                                            <td class="positive">${(signal.accuracy * 100).toFixed(1)}%</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
