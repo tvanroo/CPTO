@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { config } from '../config';
 import { SentimentScore, TradeSignal, MarketData, MarketTrend, OpenAIAPIError } from '../types';
-import { costTrackingService } from './costTrackingService.js';
+import { costTrackingService } from './costTrackingService';
 
 /**
  * AI Service using OpenAI for sentiment analysis and trading decisions
