@@ -1696,8 +1696,8 @@
                 
                 // Update trades list
                 const tradesList = document.getElementById('pending-trades-list');
-            
-            if (trades && trades.length > 0) {
+                
+                if (tradesList && trades && trades.length > 0) {
                 let tradesHTML = '';
                 trades.forEach(trade => {
                     const timeLeft = getTimeLeft(trade.expiresAt);
@@ -1748,19 +1748,27 @@
                         </div>
                     `;
                 });
-                tradesList.innerHTML = tradesHTML;
-                
-                // Enable bulk action buttons
-                document.getElementById('bulk-approve-btn').disabled = false;
-                document.getElementById('bulk-reject-btn').disabled = false;
-            } else {
-                tradesList.innerHTML = tradingMode === 'manual' ? 
-                    '<div class="loading-text">No pending trades</div>' :
-                    '<div class="loading-text">Autopilot mode - trades execute automatically</div>';
+                    tradesList.innerHTML = tradesHTML;
                     
-                // Disable bulk action buttons
-                document.getElementById('bulk-approve-btn').disabled = true;
-                document.getElementById('bulk-reject-btn').disabled = true;
+                    // Enable bulk action buttons
+                    const bulkApproveBtn = document.getElementById('bulk-approve-btn');
+                    const bulkRejectBtn = document.getElementById('bulk-reject-btn');
+                    if (bulkApproveBtn) bulkApproveBtn.disabled = false;
+                    if (bulkRejectBtn) bulkRejectBtn.disabled = false;
+                } else if (tradesList) {
+                    tradesList.innerHTML = tradingMode === 'manual' ? 
+                        '<div class="loading-text">No pending trades</div>' :
+                        '<div class="loading-text">Autopilot mode - trades execute automatically</div>';
+                        
+                    // Disable bulk action buttons
+                    const bulkApproveBtn = document.getElementById('bulk-approve-btn');
+                    const bulkRejectBtn = document.getElementById('bulk-reject-btn');
+                    if (bulkApproveBtn) bulkApproveBtn.disabled = true;
+                    if (bulkRejectBtn) bulkRejectBtn.disabled = true;
+                }
+            } catch (error) {
+                console.error('Failed to update pending trades display:', error);
+                showNotification('Failed to update pending trades display', 'error');
             }
         }
         
