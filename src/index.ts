@@ -2,6 +2,7 @@
 
 import { getConfig, isDevelopment } from './config';
 import { tradingBot } from './services/tradingBot';
+import { dataStorageService } from './services/dataStorageService';
 
 // Attempt to load configuration with better error handling
 let config: any;
@@ -111,6 +112,7 @@ async function setupGracefulShutdown(): Promise<void> {
     
     try {
       await tradingBot.stop();
+      await dataStorageService.close();
       console.log('✅ Shutdown complete');
       process.exit(0);
     } catch (error) {
@@ -160,6 +162,10 @@ function displayStartupInfo(): void {
  */
 async function main(): Promise<void> {
   try {
+    // Initialize data storage service
+    console.log('Initializing data storage service...');
+    await dataStorageService.initialize();
+    
     // Setup event handling
     setupEventListeners();
     await setupGracefulShutdown();

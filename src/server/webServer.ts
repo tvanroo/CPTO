@@ -608,7 +608,7 @@ export class WebServer {
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        res.status(500).json({ error: errorMessage });
+        return res.status(500).json({ error: errorMessage });
       }
     });
   }

@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { config } from '../config';
 import { SentimentScore, TradeSignal, MarketData, MarketTrend, OpenAIAPIError } from '../types';
 import { costTrackingService } from './costTrackingService';
+import { dataStorageService } from './dataStorageService';
 
 /**
  * AI Service using OpenAI for sentiment analysis and trading decisions
@@ -81,6 +82,75 @@ export class AIService {
   }
 
   /**
+   * Check if we have similar recent analysis to reuse
+   */
+  private async findSimilarAnalysis(text: string, ticker?: string): Promise<SentimentScore | null> {
+    try {
+      if (!ticker) return null;
+      
+      const recentAnalysis = await dataStorageService.getRecentAnalysisForTicker(ticker, 2); // Last 2 hours
+      
+      // Look for very similar content (same author, similar length, recent)
+      for (const analysis of recentAnalysis) {
+        const similarity = this.calculateTextSimilarity(text, analysis.content);
+        if (similarity > 0.85 && (Date.now() - analysis.processing_timestamp) < 3600000) { // 1 hour
+          // Increment reuse count for cost tracking
+          await dataStorageService.incrementReuseCount(analysis.id);
+          
+          console.log(`♻️  Reusing similar analysis for ${ticker} (similarity: ${(similarity * 100).toFixed(1)}%)`);
+          return {
+            score: analysis.sentiment_score,
+            magnitude: Math.abs(analysis.sentiment_score),
+            confidence: analysis.confidence_level,
+            reasoning: `[REUSED] ${analysis.sentiment_reasoning}`
+          };
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('Error checking for similar analysis:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Calculate text similarity (simple approach)
+   */
+  private calculateTextSimilarity(text1: string, text2: string): number {
+    const words1 = new Set(text1.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+    const words2 = new Set(text2.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+    
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+    
+    return union.size === 0 ? 0 : intersection.size / union.size;
+  }
+
+  /**
+   * Get historical context for better decision making
+   */
+  private async getHistoricalContext(ticker: string): Promise<string> {
+    try {
+      const recentAnalysis = await dataStorageService.getRecentAnalysisForTicker(ticker, 6); // Last 6 hours
+      
+      if (recentAnalysis.length === 0) {
+        return '';
+      }
+      
+      const contextSummary = recentAnalysis.slice(0, 5).map(analysis => {
+        const timeAgo = Math.round((Date.now() - analysis.processing_timestamp) / (1000 * 60));
+        return `${timeAgo}m ago: sentiment=${analysis.sentiment_score.toFixed(2)} conf=${analysis.confidence_level.toFixed(2)} - ${analysis.sentiment_reasoning.substring(0, 100)}`;
+      }).join('\n');
+      
+      return `\nRecent ${ticker} Analysis Context (last 6 hours):\n${contextSummary}\n`;
+    } catch (error) {
+      console.warn('Error getting historical context:', error);
+      return '';
+    }
+  }
+
+  /**
    * Analyze sentiment of Reddit text content
    */
   public async analyzeSentiment(text: string, ticker?: string): Promise<SentimentScore> {
@@ -89,8 +159,16 @@ export class AIService {
       return this.getMockSentiment(text, ticker);
     }
     
+    // Check for similar recent analysis to reuse
+    const similarAnalysis = await this.findSimilarAnalysis(text, ticker);
+    if (similarAnalysis) {
+      return similarAnalysis;
+    }
+    
     try {
-      const prompt = this.buildSentimentPrompt(text, ticker);
+      // Get historical context to improve analysis
+      const historicalContext = ticker ? await this.getHistoricalContext(ticker) : '';
+      const prompt = this.buildSentimentPrompt(text, ticker, historicalContext);
       const modelParams = this.getModelParams();
       
       const requestParams: any = {
@@ -364,9 +442,11 @@ ${combinedText}`;
   /**
    * Build sentiment analysis prompt
    */
-  private buildSentimentPrompt(text: string, ticker?: string): string {
+  private buildSentimentPrompt(text: string, ticker?: string, historicalContext?: string): string {
     const tickerContext = ticker ? ` Focus specifically on sentiment toward ${ticker}.` : '';
-    return `Analyze the sentiment of this Reddit text about cryptocurrency:${tickerContext}
+    const contextSection = historicalContext ? `\n\n${historicalContext}\nUse this context to better understand sentiment patterns and consistency.` : '';
+    
+    return `Analyze the sentiment of this Reddit text about cryptocurrency:${tickerContext}${contextSection}
 
 Text: "${text}"
 
@@ -376,7 +456,8 @@ Consider:
 - Excitement, fear, uncertainty, doubt (FUD)
 - Technical analysis mentions
 - Price predictions and expectations
-- Community mood and confidence`;
+- Community mood and confidence
+- Consistency with recent sentiment trends (if provided)`;
   }
 
   /**

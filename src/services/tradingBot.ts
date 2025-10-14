@@ -5,6 +5,7 @@ import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { geminiClient } from '../clients/geminiClient';
 import { aiService } from './aiService';
 import { pendingTradesManager } from './pendingTradesManager';
+import { dataStorageService, ProcessedContent } from './dataStorageService';
 import {
   RedditPost,
   RedditComment,
@@ -368,6 +369,13 @@ export class TradingBot extends EventEmitter {
   }
 
   /**
+   * Generate unique ID for processed content
+   */
+  private generateProcessingId(item: RedditItem): string {
+    return `processed_${item.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
    * Process a specific ticker mentioned in Reddit content
    */
   private async processTicker(ticker: string, content: string, item: RedditItem): Promise<void> {
@@ -386,18 +394,46 @@ export class TradingBot extends EventEmitter {
       const sentiment = await aiService.analyzeSentiment(content, ticker);
       console.log(`Sentiment for ${ticker}: ${sentiment.score.toFixed(2)} (confidence: ${sentiment.confidence.toFixed(2)})`);
 
-      // Check if sentiment meets threshold
-      if (Math.abs(sentiment.score) < config.trading.sentimentThreshold) {
-        console.log(`Sentiment for ${ticker} below threshold (${config.trading.sentimentThreshold})`);
-        return;
-      }
-
       // Get market data from both sources for comparison
       const marketData = await this.getMarketData(ticker);
       const marketTrend = await tokenMetricsClient.getMarketTrends(ticker);
 
       // Generate trading decision
       const tradeSignal = await aiService.generateTradeDecision(sentiment, marketData, marketTrend);
+      
+      // Store processed content with AI analysis
+      try {
+        const processedContent: ProcessedContent = {
+          id: this.generateProcessingId(item),
+          reddit_id: item.id,
+          subreddit: item.subreddit,
+          author: item.author,
+          title: 'title' in item ? item.title : undefined,
+          content,
+          url: 'url' in item ? item.url : undefined,
+          created_utc: item.created_utc,
+          type: 'title' in item ? 'post' : 'comment',
+          sentiment_score: sentiment.score,
+          sentiment_reasoning: sentiment.reasoning,
+          extracted_tickers: [ticker.toUpperCase()],
+          confidence_level: sentiment.confidence,
+          processing_timestamp: Date.now(),
+          trade_signal: tradeSignal.action !== 'HOLD' ? tradeSignal : undefined,
+          trade_reasoning: tradeSignal.action !== 'HOLD' ? tradeSignal.reasoning : undefined
+        };
+        
+        await dataStorageService.storeProcessedContent(processedContent);
+        console.log(`💾 Stored analysis for ${ticker} (ID: ${processedContent.id})`);
+      } catch (storageError) {
+        console.warn('Failed to store processed content:', storageError);
+        // Don't fail the entire processing pipeline for storage issues
+      }
+
+      // Check if sentiment meets threshold
+      if (Math.abs(sentiment.score) < config.trading.sentimentThreshold) {
+        console.log(`Sentiment for ${ticker} below threshold (${config.trading.sentimentThreshold})`);
+        return;
+      }
       
       console.log(`Trade signal for ${ticker}: ${tradeSignal.action} (confidence: ${tradeSignal.confidence.toFixed(2)})`);
       console.log(`Reasoning: ${tradeSignal.reasoning}`);
@@ -493,6 +529,26 @@ export class TradingBot extends EventEmitter {
       } else {
         this.stats.failedTrades++;
         console.log(`⚠️ Trade not completed: ${tradeResult.status}`);
+      }
+      
+      // Store trade performance data
+      try {
+        await dataStorageService.storeTradePerformance({
+          trade_id: tradeResult.order_id,
+          ticker: signal.ticker.toUpperCase(),
+          action: signal.action.toLowerCase() as 'buy' | 'sell',
+          entry_price: tradeResult.executed_price,
+          exit_price: undefined,
+          amount_usd: signal.amount_usd,
+          reasoning: signal.reasoning,
+          source_content_ids: [], // Could be enhanced to track which content triggered this
+          executed_at: Date.now(),
+          status: tradeResult.status as 'pending' | 'completed' | 'failed',
+          pnl_usd: undefined
+        });
+        console.log(`💾 Stored trade performance data for ${signal.ticker}`);
+      } catch (storageError) {
+        console.warn('Failed to store trade performance:', storageError);
       }
 
       // Emit trade event
