@@ -277,32 +277,57 @@ export class TradingBot extends EventEmitter {
    */
   private startProcessingLoop(): void {
     console.log('🔄 Starting processing loop...');
+    let loopIterations = 0;
+    
     const processNext = async () => {
-      if (!this.isRunning) return;
-
-      // Log queue status every 10 seconds for debugging
-      const now = Date.now();
-      if (!this.lastLogTime || now - this.lastLogTime > 10000) {
-        console.log(`📋 Queue status: ${this.processingQueue.length} items queued, ${this.processingInProgress.size} processing`);
-        this.lastLogTime = now;
-      }
-
-      // Process items if we have capacity
-      while (
-        this.processingQueue.length > 0 && 
-        this.processingInProgress.size < this.maxConcurrentProcessing
-      ) {
-        const queueItem = this.processingQueue.shift();
-        if (queueItem) {
-          // Don't await - allow concurrent processing
-          this.processQueueItem(queueItem).catch(error => {
-            console.error('Unhandled error in processQueueItem:', error);
-          });
+      loopIterations++;
+      
+      try {
+        if (!this.isRunning) {
+          console.log('⏹️ Processing loop stopped - bot not running');
+          return;
         }
-      }
 
-      // Schedule next iteration
-      setTimeout(processNext, 1000); // Check every second
+        // Log queue status every 10 seconds for debugging
+        const now = Date.now();
+        if (!this.lastLogTime || now - this.lastLogTime > 10000) {
+          console.log(`📋 Queue status: ${this.processingQueue.length} items queued, ${this.processingInProgress.size} processing (iteration ${loopIterations})`);
+          this.lastLogTime = now;
+          
+          // Log some details about the queue items
+          if (this.processingQueue.length > 0) {
+            const queueSample = this.processingQueue.slice(0, 3).map(item => `${item.item.id} from r/${item.item.subreddit}`);
+            console.log(`📋 Queue sample: ${queueSample.join(', ')}`);
+          }
+        }
+
+        // Process items if we have capacity
+        while (
+          this.processingQueue.length > 0 && 
+          this.processingInProgress.size < this.maxConcurrentProcessing
+        ) {
+          const queueItem = this.processingQueue.shift();
+          if (queueItem) {
+            console.log(`🏗️ Starting to process item ${queueItem.id} (${queueItem.item.id} from r/${queueItem.item.subreddit})`);
+            
+            // Don't await - allow concurrent processing
+            this.processQueueItem(queueItem).catch(error => {
+              console.error(`❌ Unhandled error in processQueueItem for ${queueItem.id}:`, error);
+              console.error('❌ Error stack:', error.stack);
+            });
+          }
+        }
+
+        // Schedule next iteration
+        setTimeout(processNext, 1000); // Check every second
+        
+      } catch (loopError) {
+        console.error('❌ Critical error in processing loop:', loopError);
+        console.error('❌ Loop error stack:', loopError.stack);
+        
+        // Try to restart the loop after a delay
+        setTimeout(processNext, 5000);
+      }
     };
 
     processNext();
@@ -313,28 +338,42 @@ export class TradingBot extends EventEmitter {
    */
   private async processQueueItem(queueItem: ProcessingQueue): Promise<void> {
     const { id, item } = queueItem;
+    console.log(`🔄 processQueueItem: Starting ${id} (${item.id} from r/${item.subreddit})`);
+    
     this.processingInProgress.add(id);
+    console.log(`📋 Added ${id} to processing set. Current processing count: ${this.processingInProgress.size}`);
 
     try {
+      console.log(`🔎 Calling processRedditItem for ${id}`);
       await this.processRedditItem(item);
+      
       this.stats.totalItemsProcessed++;
       this.stats.lastProcessedTime = Date.now();
+      console.log(`✅ Successfully processed ${id}. Total processed: ${this.stats.totalItemsProcessed}`);
       
     } catch (error) {
-      console.error(`Failed to process item ${id}:`, error);
+      console.error(`❌ Failed to process item ${id}:`, error);
+      console.error(`❌ Error details for ${id}:`, {
+        message: error.message,
+        stack: error.stack,
+        itemId: item.id,
+        subreddit: item.subreddit
+      });
+      
       this.recordError('processing', error as Error);
       
       // Retry logic
       queueItem.retries++;
       if (queueItem.retries < 3) {
-        console.log(`Retrying item ${id} (attempt ${queueItem.retries + 1})`);
+        console.log(`🔄 Retrying item ${id} (attempt ${queueItem.retries + 1})`);
         this.processingQueue.push(queueItem); // Add back to queue for retry
       } else {
-        console.error(`Max retries reached for item ${id}, dropping`);
+        console.error(`❌ Max retries reached for item ${id}, dropping`);
       }
       
     } finally {
       this.processingInProgress.delete(id);
+      console.log(`📋 Removed ${id} from processing set. Current processing count: ${this.processingInProgress.size}`);
     }
   }
 
@@ -342,21 +381,26 @@ export class TradingBot extends EventEmitter {
    * Process a single Reddit item through the complete workflow
    */
   private async processRedditItem(item: RedditItem): Promise<void> {
-    const content = this.extractContent(item);
-    console.log(`🔍 Extracted content from ${item.id}: "${content.substring(0, 100)}..." (${content.length} chars)`);
+    console.log(`🔎 processRedditItem: Starting ${item.id} from r/${item.subreddit}`);
     
-    if (!content || content.length < 10) {
-      console.log(`⏭️ Skipping ${item.id} - insufficient content (${content?.length || 0} chars)`);
-      return; // Skip items with insufficient content
-    }
-
-    console.log(`🔄 Processing ${item.id} from r/${item.subreddit}`);
-
     try {
+      const content = this.extractContent(item);
+      console.log(`🔍 Extracted content from ${item.id}: "${content.substring(0, 100)}..." (${content.length} chars)`);
+      
+      if (!content || content.length < 10) {
+        console.log(`⏭️ Skipping ${item.id} - insufficient content (${content?.length || 0} chars)`);
+        return; // Skip items with insufficient content
+      }
+
+      console.log(`🔄 Processing ${item.id} from r/${item.subreddit} - extracting tickers`);
+
       // Step 1: Extract crypto tickers from the content
       let tickers = this.tickerCache.get(content);
       if (!tickers) {
+        console.log(`🤖 Calling AI service to extract tickers for ${item.id}`);
         tickers = await aiService.extractCryptoTickers(content);
+        console.log(`🤖 AI service returned tickers for ${item.id}: ${JSON.stringify(tickers)}`);
+        
         this.tickerCache.set(content, tickers);
         
         // Clean cache if it gets too large
@@ -364,18 +408,28 @@ export class TradingBot extends EventEmitter {
           const keys = Array.from(this.tickerCache.keys()).slice(0, 100);
           keys.forEach(key => this.tickerCache.delete(key));
         }
+      } else {
+        console.log(`💾 Using cached tickers for ${item.id}: ${JSON.stringify(tickers)}`);
       }
 
       if (!tickers || tickers.length === 0) {
+        console.log(`⏭️ No crypto tickers found in ${item.id}, skipping`);
         return; // No crypto mentions found
       }
 
+      console.log(`🎖️ Found ${tickers.length} tickers in ${item.id}, processing up to 3: ${tickers.slice(0, 3).join(', ')}`);
+      
       // Step 2: Analyze sentiment
       for (const ticker of tickers.slice(0, 3)) { // Limit to 3 tickers per item to avoid API overuse
+        console.log(`💰 Processing ticker ${ticker} for ${item.id}`);
         await this.processTicker(ticker, content, item);
+        console.log(`✅ Completed processing ticker ${ticker} for ${item.id}`);
       }
+      
+      console.log(`✅ Completed processRedditItem for ${item.id}`);
 
     } catch (error) {
+      console.error(`❌ Error in processRedditItem for ${item.id}:`, error);
       throw new CPTOError(`Failed to process Reddit item ${item.id}`, 'PROCESSING_ERROR', { 
         item: { id: item.id, subreddit: item.subreddit }, 
         error 
@@ -394,6 +448,8 @@ export class TradingBot extends EventEmitter {
    * Process a specific ticker mentioned in Reddit content
    */
   private async processTicker(ticker: string, content: string, item: RedditItem): Promise<void> {
+    console.log(`💰 processTicker: Starting ${ticker} for ${item.id}`);
+    
     try {
       // Check if we've traded this ticker too recently (rate limiting)
       const lastTradeTime = this.recentTrades.get(ticker) || 0;
