@@ -373,10 +373,21 @@ Text: "${text.substring(0, 500)}"`;
       this.trackApiCall(response, 'ticker_extraction', text, content);
 
       try {
-        const tickers = JSON.parse(content);
+        // Strip markdown code blocks if present
+        let jsonContent = content;
+        if (content.includes('```')) {
+          // Extract JSON from markdown code blocks
+          const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (jsonMatch) {
+            jsonContent = jsonMatch[1].trim();
+          }
+        }
+        
+        const tickers = JSON.parse(jsonContent);
         return Array.isArray(tickers) ? tickers.filter(t => typeof t === 'string') : [];
       } catch (parseError) {
         console.warn('Failed to parse ticker extraction response:', content);
+        console.warn('Parse error:', parseError.message);
         return [];
       }
 
