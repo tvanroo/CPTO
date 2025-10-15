@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events';
 import { config } from '../config';
 import { redditClient } from '../clients/redditClient';
-import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { geminiClient } from '../clients/geminiClient';
 import { aiService } from './aiService';
 import { pendingTradesManager } from './pendingTradesManager';

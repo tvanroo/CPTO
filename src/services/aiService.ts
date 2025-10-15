@@ -36,8 +36,8 @@ export class AIService {
   private trackApiCall(
     response: OpenAI.Chat.Completions.ChatCompletion, 
     purpose: string,
-    inputText: string = '',
-    outputText: string = ''
+    _inputText: string = '',
+    _outputText: string = ''
   ): void {
     const isDev = process.env.SKIP_CONFIG_VALIDATION === 'true' || 
                  config.openai.apiKey.startsWith('placeholder_');

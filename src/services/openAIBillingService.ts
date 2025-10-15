@@ -6,7 +6,6 @@ import { config } from '../config';
  * Replaces local cost estimation with real data from OpenAI
  */
 export class OpenAIBillingService {
-  private openai: OpenAI;
   private cachedUsage: any = null;
   private lastFetchTime: number = 0;
   private readonly CACHE_DURATION = 10 * 60 * 1000; // 10 minutes cache
@@ -18,11 +17,6 @@ export class OpenAIBillingService {
     
     if (isDev) {
       console.log('⚠️  OpenAI Billing Service in development mode with mock data');
-      this.openai = {} as OpenAI; // Mock OpenAI instance
-    } else {
-      this.openai = new OpenAI({
-        apiKey: config.openai.apiKey,
-      });
     }
 
     console.log('💰 OpenAI Billing Service initialized');
@@ -91,7 +85,7 @@ export class OpenAIBillingService {
         throw new Error(`OpenAI Usage API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       console.log('✅ Successfully fetched OpenAI usage data');
       
       return {
