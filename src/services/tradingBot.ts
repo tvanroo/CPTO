@@ -77,11 +77,12 @@ export class TradingBot extends EventEmitter {
       // Start Reddit streaming
       await redditClient.startStreaming();
       
-      // Start processing queue
-      this.startProcessingLoop();
-      
+      // Set running state before starting processing loop
       this.isRunning = true;
       this.stats.startTime = Date.now();
+      
+      // Start processing queue
+      this.startProcessingLoop();
       
       console.log('✅ CPTO Trading Bot started successfully');
       this.emit('botStarted');
