@@ -385,9 +385,13 @@ Text: "${text.substring(0, 500)}"`;
         
         const tickers = JSON.parse(jsonContent);
         return Array.isArray(tickers) ? tickers.filter(t => typeof t === 'string') : [];
-      } catch (parseError) {
+      } catch (parseError: unknown) {
         console.warn('Failed to parse ticker extraction response:', content);
-        console.warn('Parse error:', parseError.message);
+        if (parseError instanceof Error) {
+          console.warn('Parse error:', parseError.message);
+        } else {
+          console.warn('Parse error:', parseError);
+        }
         return [];
       }
 
