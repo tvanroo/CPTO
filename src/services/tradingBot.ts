@@ -323,7 +323,7 @@ export class TradingBot extends EventEmitter {
         
       } catch (loopError) {
         console.error('❌ Critical error in processing loop:', loopError);
-        console.error('❌ Loop error stack:', loopError.stack);
+        console.error('❌ Loop error stack:', loopError instanceof Error ? loopError.stack : 'No stack trace');
         
         // Try to restart the loop after a delay
         setTimeout(processNext, 5000);
@@ -354,8 +354,8 @@ export class TradingBot extends EventEmitter {
     } catch (error) {
       console.error(`❌ Failed to process item ${id}:`, error);
       console.error(`❌ Error details for ${id}:`, {
-        message: error.message,
-        stack: error.stack,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : 'No stack trace',
         itemId: item.id,
         subreddit: item.subreddit
       });
