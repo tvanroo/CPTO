@@ -6,6 +6,7 @@ import { geminiClient } from '../clients/geminiClient';
 import { aiService } from './aiService';
 import { pendingTradesManager } from './pendingTradesManager';
 import { dataStorageService, ProcessedContent } from './dataStorageService';
+import { tickerValidationService } from './tickerValidationService';
 import {
   RedditPost,
   RedditComment,
@@ -68,6 +69,10 @@ export class TradingBot extends EventEmitter {
     console.log('Starting CPTO Trading Bot...');
     
     try {
+      // Initialize ticker validation service
+      console.log('🎯 Initializing ticker validation...');
+      await tickerValidationService.refreshSupportedSymbols();
+      
       // Test all connections first
       await this.testConnections();
       
@@ -418,10 +423,18 @@ export class TradingBot extends EventEmitter {
         return; // No crypto mentions found
       }
 
-      console.log(`🎖️ Found ${tickers.length} tickers in ${item.id}, processing up to 3: ${tickers.slice(0, 3).join(', ')}`);
+      // Step 2: Filter tickers to only those supported by Gemini
+      const validTickers = await tickerValidationService.validateAndFilterTickers(tickers);
       
-      // Step 2: Analyze sentiment
-      for (const ticker of tickers.slice(0, 3)) { // Limit to 3 tickers per item to avoid API overuse
+      if (validTickers.length === 0) {
+        console.log(`⏭️ No valid Gemini-supported tickers found in ${item.id}, skipping`);
+        return;
+      }
+      
+      console.log(`🎖️ Found ${validTickers.length} valid tickers in ${item.id}, processing up to 3: ${validTickers.slice(0, 3).join(', ')}`);
+      
+      // Step 3: Analyze sentiment
+      for (const ticker of validTickers.slice(0, 3)) { // Limit to 3 tickers per item to avoid API overuse
         console.log(`💰 Processing ticker ${ticker} for ${item.id}`);
         await this.processTicker(ticker, content, item);
         console.log(`✅ Completed processing ticker ${ticker} for ${item.id}`);
@@ -487,7 +500,7 @@ export class TradingBot extends EventEmitter {
           type: 'title' in item ? 'post' : 'comment',
           sentiment_score: sentiment.score,
           sentiment_reasoning: sentiment.reasoning,
-          extracted_tickers: [ticker.toUpperCase()],
+          extracted_tickers: [tickerValidationService.geminiSymbolToTicker(ticker)],
           confidence_level: sentiment.confidence,
           processing_timestamp: Date.now(),
           trade_signal: tradeSignal.action !== 'HOLD' ? tradeSignal : undefined,

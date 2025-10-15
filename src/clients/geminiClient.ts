@@ -94,13 +94,16 @@ export class GeminiClient {
     }
     
     try {
+      const lowerSymbol = symbol.toLowerCase();
+      console.log(`💰 Fetching price for ${lowerSymbol} from Gemini`);
+      
       // Get current ticker data
-      const tickerResponse: AxiosResponse = await this.client.get(`/v1/pubticker/${symbol.toLowerCase()}`);
+      const tickerResponse: AxiosResponse = await this.client.get(`/v1/pubticker/${lowerSymbol}`);
       
       // Get 24hr stats
-      const statsResponse: AxiosResponse = await this.client.get(`/v2/ticker/${symbol.toLowerCase()}`);
+      const statsResponse: AxiosResponse = await this.client.get(`/v2/ticker/${lowerSymbol}`);
       
-      return this.formatMarketData(symbol, tickerResponse.data, statsResponse.data);
+      return this.formatMarketData(symbol.toUpperCase(), tickerResponse.data, statsResponse.data);
     } catch (error) {
       throw new GeminiAPIError(`Failed to get price for ${symbol}`, { symbol, error });
     }
