@@ -16,6 +16,7 @@ import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
 import { dataStorageService } from '../services/dataStorageService';
 import { backtestingService } from '../services/backtestingService';
+import { tickerValidationService } from '../services/tickerValidationService';
 
 /**
  * Web server for CPTO Dashboard
@@ -106,6 +107,11 @@ export class WebServer {
     // Serve the dashboard
     this.app.get('/', (_req, res) => {
       res.sendFile(path.join(__dirname, '../../public/dashboard.html'));
+    });
+    
+    // Serve the ticker management page
+    this.app.get('/tickers', (_req, res) => {
+      res.sendFile(path.join(__dirname, '../../public/tickers.html'));
     });
 
     // Bot control routes
@@ -559,6 +565,101 @@ export class WebServer {
           message: 'For detailed OpenAI usage and billing, please check your OpenAI dashboard at https://platform.openai.com/usage',
           note: 'OpenAI does not provide a reliable public API for usage tracking',
           model: config.openai.model,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Ticker validation and filtering endpoints
+    this.app.get('/api/tickers/supported', async (_req, res) => {
+      try {
+        const supportedSymbols = await tickerValidationService.getAllSupportedSymbols();
+        const cacheStats = tickerValidationService.getCacheStats();
+        
+        // Convert Gemini symbols to readable format
+        const readableSymbols = supportedSymbols.map(symbol => {
+          const ticker = tickerValidationService.geminiSymbolToTicker(symbol);
+          return {
+            geminiSymbol: symbol.toUpperCase(),
+            ticker,
+            tradingPair: symbol.toUpperCase()
+          };
+        }).sort((a, b) => a.ticker.localeCompare(b.ticker));
+        
+        res.json({
+          totalSymbols: supportedSymbols.length,
+          symbols: readableSymbols,
+          cacheInfo: {
+            lastUpdated: new Date(cacheStats.lastUpdated).toISOString(),
+            cacheAge: Math.round(cacheStats.cacheAge / (1000 * 60 * 60)) + ' hours',
+            symbolCount: cacheStats.symbolCount
+          },
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.get('/api/tickers/mappings', (_req, res) => {
+      try {
+        // Get the common ticker mappings from the validation service
+        const sampleMappings = [
+          { ticker: 'BTC', geminiSymbols: ['BTCUSD', 'BTCEUR'], primary: 'BTCUSD' },
+          { ticker: 'ETH', geminiSymbols: ['ETHUSD', 'ETHEUR', 'ETHBTC'], primary: 'ETHUSD' },
+          { ticker: 'LTC', geminiSymbols: ['LTCUSD', 'LTCEUR', 'LTCBTC'], primary: 'LTCUSD' },
+          { ticker: 'LINK', geminiSymbols: ['LINKUSD', 'LINKEUR', 'LINKBTC'], primary: 'LINKUSD' },
+          { ticker: 'UNI', geminiSymbols: ['UNIUSD', 'UNIEUR', 'UNIBTC'], primary: 'UNIUSD' },
+          { ticker: 'AAVE', geminiSymbols: ['AAVEUSD', 'AAVEEUR', 'AAVEBTC'], primary: 'AAVEUSD' },
+          { ticker: 'MATIC', geminiSymbols: ['MATICUSD', 'MATICEUR', 'MATICBTC'], primary: 'MATICUSD' }
+        ];
+        
+        res.json({
+          description: 'Common ticker to Gemini symbol mappings',
+          note: 'We use the USD pair as primary for most tickers',
+          mappings: sampleMappings,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/tickers/refresh', async (_req, res) => {
+      try {
+        await tickerValidationService.refreshSupportedSymbols();
+        const cacheStats = tickerValidationService.getCacheStats();
+        
+        res.json({
+          success: true,
+          message: 'Ticker symbols refreshed from Gemini API',
+          symbolCount: cacheStats.symbolCount,
+          lastUpdated: new Date(cacheStats.lastUpdated).toISOString(),
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/tickers/test/:ticker', async (req, res) => {
+      try {
+        const { ticker } = req.params;
+        const validatedTickers = await tickerValidationService.validateAndFilterTickers([ticker.toUpperCase()]);
+        
+        res.json({
+          inputTicker: ticker.toUpperCase(),
+          isSupported: validatedTickers.length > 0,
+          geminiSymbol: validatedTickers[0] || null,
+          message: validatedTickers.length > 0 
+            ? `${ticker.toUpperCase()} is supported and maps to ${validatedTickers[0]}`
+            : `${ticker.toUpperCase()} is not supported on Gemini`,
           timestamp: new Date().toISOString()
         });
       } catch (error) {
