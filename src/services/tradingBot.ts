@@ -481,7 +481,7 @@ export class TradingBot extends EventEmitter {
 
       // Get market data from Gemini
       const marketData = await this.getMarketData(ticker);
-      const marketTrend = null; // Skip TokenMetrics trend data
+      const marketTrend = undefined; // Skip TokenMetrics trend data
 
       // Generate trading decision
       const tradeSignal = await aiService.generateTradeDecision(sentiment, marketData, marketTrend);

@@ -1,5 +1,4 @@
 import { geminiClient } from '../clients/geminiClient';
-import { CPTOError } from '../types';
 
 /**
  * Service to validate and filter cryptocurrency tickers based on Gemini's supported symbols
