@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import { config } from '../config';
 import { SentimentScore, TradeSignal, MarketData, MarketTrend, OpenAIAPIError } from '../types';
-import { openAIBillingService } from './openAIBillingService';
 import { dataStorageService } from './dataStorageService';
 
 /**
@@ -47,16 +46,8 @@ export class AIService {
       return;
     }
 
-    // Simple logging - actual costs are tracked via OpenAI's billing API
+    // Simple logging for monitoring
     console.log(`📊 OpenAI API call: ${response.model} - ${response.usage.total_tokens} tokens (${purpose})`);
-    
-    // Optionally refresh billing cache periodically (every 50 calls)
-    if (Math.random() < 0.02) { // 2% chance per call
-      // Clear cache occasionally to get fresh data
-      setTimeout(() => {
-        openAIBillingService.clearCache();
-      }, 1000);
-    }
   }
 
   /**

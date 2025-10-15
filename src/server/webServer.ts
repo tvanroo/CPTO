@@ -14,7 +14,6 @@ import { geminiClient } from '../clients/geminiClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
-import { openAIBillingService } from '../services/openAIBillingService';
 import { dataStorageService } from '../services/dataStorageService';
 import { backtestingService } from '../services/backtestingService';
 
@@ -159,15 +158,9 @@ export class WebServer {
         
         switch (service) {
           case 'openai':
-            const aiConnected = await aiService.testConnection();
-            const billingConnected = await openAIBillingService.testConnection();
-            result.connected = aiConnected && billingConnected;
+            result.connected = await aiService.testConnection();
             result.service = 'OpenAI';
             result.model = aiService.getModelInfo();
-            result.billing = {
-              connected: billingConnected,
-              api: 'Usage API'
-            };
             break;
             
           case 'tokenmetrics':
@@ -559,63 +552,13 @@ export class WebServer {
       });
     });
     
-    // OpenAI billing endpoints (real data from OpenAI)
-    this.app.get('/api/billing/summary', async (_req, res) => {
+    // Simple API usage info endpoint
+    this.app.get('/api/usage/info', (_req, res) => {
       try {
-        const summary = await openAIBillingService.getUsageSummary();
-        
         res.json({
-          ...summary,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        res.status(500).json({ error: errorMessage });
-      }
-    });
-    
-    this.app.get('/api/billing/current', async (_req, res) => {
-      try {
-        const billingInfo = await openAIBillingService.getBillingInfo();
-        
-        res.json({
-          ...billingInfo,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        res.status(500).json({ error: errorMessage });
-      }
-    });
-    
-    this.app.get('/api/billing/by-model', async (req, res) => {
-      try {
-        const startDate = req.query.start_date as string;
-        const endDate = req.query.end_date as string;
-        
-        const modelBreakdown = await openAIBillingService.getUsageByModel(startDate, endDate);
-        
-        res.json({
-          breakdown: modelBreakdown,
-          period: {
-            start: startDate || 'current month start',
-            end: endDate || 'today'
-          },
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        res.status(500).json({ error: errorMessage });
-      }
-    });
-    
-    this.app.post('/api/billing/refresh', (_req, res) => {
-      try {
-        openAIBillingService.clearCache();
-        
-        res.json({
-          success: true,
-          message: 'Billing cache cleared. Fresh data will be fetched on next request.',
+          message: 'For detailed OpenAI usage and billing, please check your OpenAI dashboard at https://platform.openai.com/usage',
+          note: 'OpenAI does not provide a reliable public API for usage tracking',
+          model: config.openai.model,
           timestamp: new Date().toISOString()
         });
       } catch (error) {

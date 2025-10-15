@@ -6,7 +6,6 @@ import { aiService } from './aiService';
 import { pendingTradesManager } from './pendingTradesManager';
 import { dataStorageService, ProcessedContent } from './dataStorageService';
 import { tickerValidationService } from './tickerValidationService';
-import { openAIBillingService } from './openAIBillingService';
 import {
   RedditPost,
   RedditComment,
@@ -235,7 +234,6 @@ export class TradingBot extends EventEmitter {
     
     const tests = [
       { name: 'OpenAI', test: () => aiService.testConnection() },
-      { name: 'OpenAI Billing', test: () => openAIBillingService.testConnection() },
       { name: 'Gemini', test: () => geminiClient.testConnection() }
     ];
 
