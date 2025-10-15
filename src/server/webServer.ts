@@ -14,7 +14,7 @@ import { geminiClient } from '../clients/geminiClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
 import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
-import { costTrackingService } from '../services/costTrackingService';
+import { openAIBillingService } from '../services/openAIBillingService';
 import { dataStorageService } from '../services/dataStorageService';
 import { backtestingService } from '../services/backtestingService';
 
@@ -159,9 +159,15 @@ export class WebServer {
         
         switch (service) {
           case 'openai':
-            result.connected = await aiService.testConnection();
+            const aiConnected = await aiService.testConnection();
+            const billingConnected = await openAIBillingService.testConnection();
+            result.connected = aiConnected && billingConnected;
             result.service = 'OpenAI';
             result.model = aiService.getModelInfo();
+            result.billing = {
+              connected: billingConnected,
+              api: 'Usage API'
+            };
             break;
             
           case 'tokenmetrics':
@@ -553,26 +559,10 @@ export class WebServer {
       });
     });
     
-    // OpenAI cost tracking
-    this.app.get('/api/costs/summary', (_req, res) => {
+    // OpenAI billing endpoints (real data from OpenAI)
+    this.app.get('/api/billing/summary', async (_req, res) => {
       try {
-        const cumulative = costTrackingService.getCumulativeCostSummary();
-        const last24Hours = costTrackingService.getCostSummaryLast24Hours();
-        
-        res.json({
-          cumulative,
-          last24Hours,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        res.status(500).json({ error: errorMessage });
-      }
-    });
-    
-    this.app.get('/api/costs/cumulative', (_req, res) => {
-      try {
-        const summary = costTrackingService.getCumulativeCostSummary();
+        const summary = await openAIBillingService.getUsageSummary();
         
         res.json({
           ...summary,
@@ -584,12 +574,12 @@ export class WebServer {
       }
     });
     
-    this.app.get('/api/costs/24h', (_req, res) => {
+    this.app.get('/api/billing/current', async (_req, res) => {
       try {
-        const summary = costTrackingService.getCostSummaryLast24Hours();
+        const billingInfo = await openAIBillingService.getBillingInfo();
         
         res.json({
-          ...summary,
+          ...billingInfo,
           timestamp: new Date().toISOString()
         });
       } catch (error) {
@@ -598,15 +588,19 @@ export class WebServer {
       }
     });
     
-    this.app.get('/api/costs/recent', (req, res) => {
+    this.app.get('/api/billing/by-model', async (req, res) => {
       try {
-        const limit = parseInt(req.query.limit as string) || 50;
-        const recentCalls = costTrackingService.getRecentApiCalls(limit);
-        const stats = costTrackingService.getStats();
+        const startDate = req.query.start_date as string;
+        const endDate = req.query.end_date as string;
+        
+        const modelBreakdown = await openAIBillingService.getUsageByModel(startDate, endDate);
         
         res.json({
-          calls: recentCalls,
-          stats,
+          breakdown: modelBreakdown,
+          period: {
+            start: startDate || 'current month start',
+            end: endDate || 'today'
+          },
           timestamp: new Date().toISOString()
         });
       } catch (error) {
@@ -615,25 +609,18 @@ export class WebServer {
       }
     });
     
-    this.app.delete('/api/costs/cleanup/:days', (req, res) => {
+    this.app.post('/api/billing/refresh', (_req, res) => {
       try {
-        const days = parseInt(req.params.days) || 7;
-        if (days < 1 || days > 365) {
-          return res.status(400).json({ error: 'Days must be between 1 and 365' });
-        }
+        openAIBillingService.clearCache();
         
-        costTrackingService.cleanupOldCalls(days);
-        const stats = costTrackingService.getStats();
-        
-        return res.json({
+        res.json({
           success: true,
-          message: `Cleaned up API calls older than ${days} days`,
-          stats,
+          message: 'Billing cache cleared. Fresh data will be fetched on next request.',
           timestamp: new Date().toISOString()
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: errorMessage });
+        res.status(500).json({ error: errorMessage });
       }
     });
     

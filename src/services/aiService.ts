@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { config } from '../config';
 import { SentimentScore, TradeSignal, MarketData, MarketTrend, OpenAIAPIError } from '../types';
-import { costTrackingService } from './costTrackingService';
+import { openAIBillingService } from './openAIBillingService';
 import { dataStorageService } from './dataStorageService';
 
 /**
@@ -31,7 +31,7 @@ export class AIService {
   }
 
   /**
-   * Track OpenAI API call for cost monitoring
+   * Track OpenAI API call - just log for monitoring, actual costs tracked via OpenAI billing API
    */
   private trackApiCall(
     response: OpenAI.Chat.Completions.ChatCompletion, 
@@ -42,22 +42,21 @@ export class AIService {
     const isDev = process.env.SKIP_CONFIG_VALIDATION === 'true' || 
                  config.openai.apiKey.startsWith('placeholder_');
     
-    // Only track real API calls, not mock calls
+    // Only log real API calls, not mock calls
     if (isDev || !response.usage) {
       return;
     }
 
-    costTrackingService.trackApiCall(
-      response.model,
-      {
-        prompt_tokens: response.usage.prompt_tokens,
-        completion_tokens: response.usage.completion_tokens,
-        total_tokens: response.usage.total_tokens
-      },
-      purpose,
-      inputText.length,
-      outputText.length
-    );
+    // Simple logging - actual costs are tracked via OpenAI's billing API
+    console.log(`📊 OpenAI API call: ${response.model} - ${response.usage.total_tokens} tokens (${purpose})`);
+    
+    // Optionally refresh billing cache periodically (every 50 calls)
+    if (Math.random() < 0.02) { // 2% chance per call
+      // Clear cache occasionally to get fresh data
+      setTimeout(() => {
+        openAIBillingService.clearCache();
+      }, 1000);
+    }
   }
 
   /**

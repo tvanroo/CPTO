@@ -189,9 +189,29 @@ The project uses comprehensive TypeScript types in `src/types/index.ts`:
 - Queue size capped at 1000 items with 10% overflow cleanup
 - Processing limited to 3 concurrent operations
 
+## MCP Server Integration
+
+For enhanced AI assistance when working with this project, you can use the following MCP server links to provide context-aware documentation:
+
+**Context7 MCP Server Links:**
+
+- **Gemini API Documentation**: `https://context7.com/websites/gemini/llms.txt`
+  - Use when working with Gemini cryptocurrency exchange API integration or considering Gemini as a trading platform
+- **OpenAI Platform Documentation**: `https://context7.com/websites/platform_openai/llms.txt`
+  - Use when working with OpenAI API integration, which is the current primary AI engine for sentiment analysis
+- **Reddit Developer API Documentation**: `https://context7.com/websites/reddit-dev-api/llms.txt`
+  - Use when working with Reddit API integration, streaming, or troubleshooting Reddit client issues
+
+**Usage Instructions:**
+
+1. These links provide up-to-date API documentation and best practices
+2. Reference them when modifying or extending the AI service, Reddit client, or considering new integrations
+3. Particularly useful for understanding API rate limits, authentication patterns, and response formats
+4. The documentation helps ensure compliance with each platform's terms of service and best practices
+
 ## File Structure
 
-```
+```text
 src/
 ├── clients/           # External API integrations
 │   ├── redditClient.ts    # Snoowrap Reddit streaming
