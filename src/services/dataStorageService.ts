@@ -213,6 +213,18 @@ export class DataStorageService {
         ON market_snapshots(ticker, timestamp DESC);
     `);
 
+    // Disabled tickers configuration
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS disabled_tickers (
+        ticker TEXT PRIMARY KEY,
+        disabled_at INTEGER NOT NULL,
+        reason TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_disabled_tickers_ticker 
+        ON disabled_tickers(ticker);
+    `);
+
     // Pending trades for manual approval mode
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS pending_trades (
@@ -1132,6 +1144,57 @@ export class DataStorageService {
       `UPDATE processed_content SET ${updates.join(', ')} WHERE id = ?`,
       params
     );
+  }
+
+  /**
+   * Check if a ticker is disabled
+   */
+  async isTickerDisabled(ticker: string): Promise<boolean> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.get(
+      'SELECT ticker FROM disabled_tickers WHERE ticker = ?',
+      [ticker.toUpperCase()]
+    );
+
+    return !!result;
+  }
+
+  /**
+   * Disable a ticker
+   */
+  async disableTicker(ticker: string, reason?: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(
+      'INSERT OR REPLACE INTO disabled_tickers (ticker, disabled_at, reason) VALUES (?, ?, ?)',
+      [ticker.toUpperCase(), Date.now(), reason || null]
+    );
+  }
+
+  /**
+   * Enable a ticker (remove from disabled list)
+   */
+  async enableTicker(ticker: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(
+      'DELETE FROM disabled_tickers WHERE ticker = ?',
+      [ticker.toUpperCase()]
+    );
+  }
+
+  /**
+   * Get all disabled tickers
+   */
+  async getDisabledTickers(): Promise<string[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT ticker FROM disabled_tickers ORDER BY ticker'
+    );
+
+    return rows.map(row => row.ticker);
   }
 
   /**

@@ -668,6 +668,59 @@ export class WebServer {
       }
     });
     
+    // Disabled ticker management endpoints
+    this.app.get('/api/tickers/disabled', async (_req, res) => {
+      try {
+        const disabledTickers = await dataStorageService.getDisabledTickers();
+        
+        res.json({
+          disabledTickers,
+          count: disabledTickers.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/tickers/disable/:ticker', async (req, res) => {
+      try {
+        const { ticker } = req.params;
+        const { reason } = req.body;
+        
+        await dataStorageService.disableTicker(ticker.toUpperCase(), reason);
+        
+        res.json({
+          success: true,
+          message: `${ticker.toUpperCase()} has been disabled for trading`,
+          ticker: ticker.toUpperCase(),
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    this.app.post('/api/tickers/enable/:ticker', async (req, res) => {
+      try {
+        const { ticker } = req.params;
+        
+        await dataStorageService.enableTicker(ticker.toUpperCase());
+        
+        res.json({
+          success: true,
+          message: `${ticker.toUpperCase()} has been enabled for trading`,
+          ticker: ticker.toUpperCase(),
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+      }
+    });
+    
     // SQLite Data Analytics Endpoints
     
     // Get recent processed content

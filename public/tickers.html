@@ -235,6 +235,7 @@
                         <th>Ticker</th>
                         <th>Gemini Symbol</th>
                         <th>Trading Pair</th>
+                        <th>Enabled</th>
                     </tr>
                 </thead>
                 <tbody id="tickerTableBody">
@@ -247,6 +248,7 @@
     <script>
         let allTickers = [];
         let filteredTickers = [];
+        let disabledTickers = new Set();
         let currentPage = 1;
         const tickersPerPage = 50;
 
@@ -264,17 +266,23 @@
 
         async function loadTickers() {
             try {
-                const response = await fetch('/api/tickers/supported');
-                const data = await response.json();
+                const [tickersResponse, disabledResponse] = await Promise.all([
+                    fetch('/api/tickers/supported'),
+                    fetch('/api/tickers/disabled')
+                ]);
                 
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to load tickers');
+                const tickersData = await tickersResponse.json();
+                const disabledData = await disabledResponse.json();
+                
+                if (!tickersResponse.ok) {
+                    throw new Error(tickersData.error || 'Failed to load tickers');
                 }
 
-                allTickers = data.symbols;
+                allTickers = tickersData.symbols;
                 filteredTickers = [...allTickers];
+                disabledTickers = new Set(disabledData.disabledTickers || []);
                 
-                updateStats(data);
+                updateStats(tickersData);
                 displayTickers();
                 
                 document.getElementById('loading').style.display = 'none';
@@ -306,11 +314,21 @@
             tbody.innerHTML = '';
             
             pageData.forEach(ticker => {
+                const isDisabled = disabledTickers.has(ticker.ticker);
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td><span class="ticker-badge">${ticker.ticker}</span></td>
                     <td><span class="symbol-badge">${ticker.geminiSymbol}</span></td>
                     <td>${ticker.tradingPair}</td>
+                    <td>
+                        <input type="checkbox" 
+                               id="toggle-${ticker.ticker}" 
+                               ${isDisabled ? '' : 'checked'} 
+                               onchange="toggleTicker('${ticker.ticker}', this.checked)">
+                        <label for="toggle-${ticker.ticker}" style="margin-left: 5px; cursor: pointer;">
+                            ${isDisabled ? '❌ Disabled' : '✅ Enabled'}
+                        </label>
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
@@ -447,6 +465,38 @@
             } catch (error) {
                 console.error('Error loading mappings:', error);
                 showError('Error loading mappings: ' + error.message);
+            }
+        }
+
+        async function toggleTicker(ticker, enabled) {
+            try {
+                const endpoint = enabled ? 'enable' : 'disable';
+                const response = await fetch(`/api/tickers/${endpoint}/${ticker}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || `Failed to ${endpoint} ticker`);
+                }
+                
+                // Update local state
+                if (enabled) {
+                    disabledTickers.delete(ticker);
+                } else {
+                    disabledTickers.add(ticker);
+                }
+                
+                showMessage(`${ticker} ${enabled ? 'enabled' : 'disabled'}`);
+                displayTickers(); // Refresh display
+                
+            } catch (error) {
+                console.error(`Error toggling ticker:`, error);
+                showError(`Error: ` + error.message);
+                // Revert checkbox
+                const checkbox = document.getElementById(`toggle-${ticker}`);
+                if (checkbox) checkbox.checked = !enabled;
             }
         }
 

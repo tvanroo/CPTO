@@ -642,6 +642,13 @@ export class TradingBot extends EventEmitter {
    */
   private async executeTrade(signal: TradeSignal, sourceItem: RedditItem): Promise<void> {
     try {
+      // Check if ticker is disabled
+      const isDisabled = await dataStorageService.isTickerDisabled(signal.ticker);
+      if (isDisabled) {
+        console.log(`⛔ Skipping trade execution for ${signal.ticker} - ticker is disabled`);
+        return;
+      }
+      
       console.log(`🚀 Executing ${signal.action} trade for ${signal.ticker}`);
       
       const order: TradeOrder = {
