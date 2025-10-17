@@ -979,6 +979,7 @@ export class DataStorageService {
    * Get trading statistics from database for bot startup
    */
   async getTradingStatsFromDB(): Promise<{
+    totalItemsProcessed: number;
     totalTradesExecuted: number;
     successfulTrades: number;
     failedTrades: number;
@@ -986,7 +987,7 @@ export class DataStorageService {
   }> {
     if (!this.db) throw new Error('Database not initialized');
 
-    const stats = await this.db.get(`
+    const tradeStats = await this.db.get(`
       SELECT 
         COUNT(*) as total_trades,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as successful,
@@ -995,11 +996,18 @@ export class DataStorageService {
       FROM trade_performance
     `);
 
+    // Count unique processed Reddit items
+    const itemsProcessed = await this.db.get(`
+      SELECT COUNT(DISTINCT reddit_id) as total_items
+      FROM processed_content
+    `);
+
     return {
-      totalTradesExecuted: stats.total_trades || 0,
-      successfulTrades: stats.successful || 0,
-      failedTrades: stats.failed || 0,
-      totalProfitLoss: stats.total_pnl || 0
+      totalItemsProcessed: itemsProcessed.total_items || 0,
+      totalTradesExecuted: tradeStats.total_trades || 0,
+      successfulTrades: tradeStats.successful || 0,
+      failedTrades: tradeStats.failed || 0,
+      totalProfitLoss: tradeStats.total_pnl || 0
     };
   }
 
