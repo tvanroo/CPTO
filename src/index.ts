@@ -3,6 +3,7 @@
 import { getConfig, isDevelopment } from './config';
 import { tradingBot } from './services/tradingBot';
 import { dataStorageService } from './services/dataStorageService';
+import { webServer } from './server/webServer';
 
 // Attempt to load configuration with better error handling
 let config: any;
@@ -112,6 +113,7 @@ async function setupGracefulShutdown(): Promise<void> {
     
     try {
       await tradingBot.stop();
+      await webServer.stop();
       await dataStorageService.close();
       console.log('✅ Shutdown complete');
       process.exit(0);
@@ -173,9 +175,19 @@ async function main(): Promise<void> {
     // Display startup information
     displayStartupInfo();
     
-    // Start the trading bot
-    console.log('Starting CPTO Trading Bot...\n');
-    await tradingBot.start();
+    // Start the web dashboard server
+    console.log('Starting CPTO Web Dashboard...');
+    await webServer.start();
+    console.log(`✅ Dashboard running at http://localhost:${config.app.port + 1000}\n`);
+    
+    // Auto-start the trading bot unless explicitly disabled
+    const autoStart = (process.env.BOT_AUTO_START ?? 'true').toLowerCase() !== 'false';
+    if (autoStart) {
+      console.log('Starting CPTO Trading Bot (auto-start enabled)...\n');
+      await tradingBot.start();
+    } else {
+      console.log('Bot auto-start disabled. Use dashboard to start manually.\n');
+    }
     
     // Keep the process running
     console.log('CPTO is now running. Press Ctrl+C to stop.\n');

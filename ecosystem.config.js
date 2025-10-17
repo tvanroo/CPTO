@@ -9,11 +9,13 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'development',
-        LOG_LEVEL: 'info'
+        LOG_LEVEL: 'info',
+        BOT_AUTO_START: 'true'
       },
       env_production: {
         NODE_ENV: 'production',
-        LOG_LEVEL: 'warn'
+        LOG_LEVEL: 'warn',
+        BOT_AUTO_START: 'true'
       },
       error_file: './logs/cpto-error.log',
       out_file: './logs/cpto-out.log',
