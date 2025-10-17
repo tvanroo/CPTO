@@ -68,6 +68,10 @@ export class TradingBot extends EventEmitter {
     console.log('Starting CPTO Trading Bot...');
     
     try {
+      // Load historical data from database
+      await this.loadHistoricalStats();
+      await pendingTradesManager.loadFromDatabase();
+      
       // Initialize ticker validation service
       console.log('🎯 Initializing ticker validation...');
       await tickerValidationService.refreshSupportedSymbols();
@@ -154,6 +158,26 @@ export class TradingBot extends EventEmitter {
       lastProcessedTime: 0,
       errors: {}
     };
+  }
+
+  /**
+   * Load historical statistics from database
+   */
+  private async loadHistoricalStats(): Promise<void> {
+    try {
+      const dbStats = await dataStorageService.getTradingStatsFromDB();
+      
+      this.stats.totalTradesExecuted = dbStats.totalTradesExecuted;
+      this.stats.successfulTrades = dbStats.successfulTrades;
+      this.stats.failedTrades = dbStats.failedTrades;
+      this.stats.totalProfitLoss = dbStats.totalProfitLoss;
+      
+      if (dbStats.totalTradesExecuted > 0) {
+        console.log(`📊 Historical stats loaded: ${dbStats.totalTradesExecuted} trades, ${dbStats.successfulTrades} successful, $${dbStats.totalProfitLoss.toFixed(2)} P&L`);
+      }
+    } catch (error) {
+      console.error('Failed to load historical stats:', error);
+    }
   }
 
   /**

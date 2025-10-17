@@ -174,6 +174,30 @@ export class DataStorageService {
         ON trade_performance(executed_at DESC);
     `);
 
+    // Pending trades for manual approval mode
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS pending_trades (
+        id TEXT PRIMARY KEY,
+        signal_data TEXT NOT NULL, -- JSON
+        source_item_data TEXT NOT NULL, -- JSON
+        market_data TEXT, -- JSON
+        market_trend_data TEXT, -- JSON
+        sentiment_data TEXT NOT NULL, -- JSON
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'expired')),
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        processed_at INTEGER,
+        approval_reason TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_pending_trades_status 
+        ON pending_trades(status);
+      CREATE INDEX IF NOT EXISTS idx_pending_trades_created 
+        ON pending_trades(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_pending_trades_expires 
+        ON pending_trades(expires_at);
+    `);
+
     console.log('✅ Database tables created/verified');
   }
 
@@ -898,6 +922,99 @@ export class DataStorageService {
       .sort((a, b) => b.decisions - a.decisions);
   }
   
+  /**
+   * Get trading statistics from database for bot startup
+   */
+  async getTradingStatsFromDB(): Promise<{
+    totalTradesExecuted: number;
+    successfulTrades: number;
+    failedTrades: number;
+    totalProfitLoss: number;
+  }> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stats = await this.db.get(`
+      SELECT 
+        COUNT(*) as total_trades,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as successful,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        COALESCE(SUM(pnl_usd), 0) as total_pnl
+      FROM trade_performance
+    `);
+
+    return {
+      totalTradesExecuted: stats.total_trades || 0,
+      successfulTrades: stats.successful || 0,
+      failedTrades: stats.failed || 0,
+      totalProfitLoss: stats.total_pnl || 0
+    };
+  }
+
+  /**
+   * Save a pending trade to database
+   */
+  async savePendingTrade(pendingTrade: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(`
+      INSERT OR REPLACE INTO pending_trades (
+        id, signal_data, source_item_data, market_data, market_trend_data,
+        sentiment_data, status, created_at, expires_at, processed_at, approval_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      pendingTrade.id,
+      JSON.stringify(pendingTrade.signal),
+      JSON.stringify(pendingTrade.sourceItem),
+      pendingTrade.marketData ? JSON.stringify(pendingTrade.marketData) : null,
+      pendingTrade.marketTrend ? JSON.stringify(pendingTrade.marketTrend) : null,
+      JSON.stringify(pendingTrade.sentiment),
+      pendingTrade.status,
+      pendingTrade.createdAt,
+      pendingTrade.expiresAt,
+      pendingTrade.processed_at || null,
+      pendingTrade.approval_reason || null
+    ]);
+  }
+
+  /**
+   * Load active pending trades from database
+   */
+  async loadPendingTrades(): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = Date.now();
+    const rows = await this.db.all(`
+      SELECT * FROM pending_trades
+      WHERE status = 'pending' AND expires_at > ?
+      ORDER BY created_at DESC
+    `, [now]);
+
+    return rows.map(row => ({
+      id: row.id,
+      signal: JSON.parse(row.signal_data),
+      sourceItem: JSON.parse(row.source_item_data),
+      marketData: row.market_data ? JSON.parse(row.market_data) : null,
+      marketTrend: row.market_trend_data ? JSON.parse(row.market_trend_data) : null,
+      sentiment: JSON.parse(row.sentiment_data),
+      status: row.status,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at
+    }));
+  }
+
+  /**
+   * Update pending trade status in database
+   */
+  async updatePendingTradeStatus(tradeId: string, status: string, reason?: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(`
+      UPDATE pending_trades 
+      SET status = ?, processed_at = ?, approval_reason = ?
+      WHERE id = ?
+    `, [status, Date.now(), reason || null, tradeId]);
+  }
+
   /**
    * Get processing statistics for cost optimization monitoring
    */

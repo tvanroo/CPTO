@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { PendingTrade, TradeSignal, TradeApproval, SentimentScore } from '../types';
 import { config } from '../config';
+import { dataStorageService } from './dataStorageService';
 
 /**
  * Manages pending trades for manual approval mode
@@ -15,6 +16,25 @@ export class PendingTradesManager extends EventEmitter {
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpiredTrades();
     }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Load pending trades from database on startup
+   */
+  public async loadFromDatabase(): Promise<number> {
+    try {
+      const trades = await dataStorageService.loadPendingTrades();
+      
+      for (const trade of trades) {
+        this.pendingTrades.set(trade.id, trade);
+      }
+      
+      console.log(`💾 Loaded ${trades.length} pending trades from database`);
+      return trades.length;
+    } catch (error) {
+      console.error('Failed to load pending trades from database:', error);
+      return 0;
+    }
   }
 
   /**
@@ -50,7 +70,14 @@ export class PendingTradesManager extends EventEmitter {
 
     this.pendingTrades.set(tradeId, pendingTrade);
 
-    console.log(`📋 New pending trade: ${signal.action.toUpperCase()} ${signal.ticker} @ $${signal.amount_usd} (ID: ${tradeId})`);
+    // Save to database
+    try {
+      await dataStorageService.savePendingTrade(pendingTrade);
+    } catch (error) {
+      console.error('Failed to save pending trade to database:', error);
+    }
+
+    console.log(`📝 New pending trade: ${signal.action.toUpperCase()} ${signal.ticker} @ $${signal.amount_usd} (ID: ${tradeId})`);
     
     // Emit event for real-time notifications
     this.emit('newPendingTrade', pendingTrade);
@@ -82,7 +109,18 @@ export class PendingTradesManager extends EventEmitter {
     // Update trade status
     pendingTrade.status = approval.action === 'approve' ? 'approved' : 'rejected';
 
-    console.log(`📋 Trade ${approval.tradeId} ${pendingTrade.status.toUpperCase()}: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker}`);
+    // Update database
+    try {
+      await dataStorageService.updatePendingTradeStatus(
+        approval.tradeId,
+        pendingTrade.status,
+        approval.reason
+      );
+    } catch (error) {
+      console.error('Failed to update pending trade status in database:', error);
+    }
+
+    console.log(`📝 Trade ${approval.tradeId} ${pendingTrade.status.toUpperCase()}: ${pendingTrade.signal.action.toUpperCase()} ${pendingTrade.signal.ticker}`);
 
     // Emit events for real-time notifications
     this.emit('tradeApprovalProcessed', {
@@ -199,6 +237,16 @@ export class PendingTradesManager extends EventEmitter {
     for (const [tradeId, trade] of this.pendingTrades.entries()) {
       if (trade.expiresAt <= now && trade.status === 'pending') {
         trade.status = 'expired';
+        
+        // Update database
+        try {
+          dataStorageService.updatePendingTradeStatus(tradeId, 'expired').catch(err => 
+            console.error('Failed to update expired trade in database:', err)
+          );
+        } catch (error) {
+          // Ignore errors during cleanup
+        }
+        
         this.emit('tradeExpired', trade);
         expiredCount++;
       }
