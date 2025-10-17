@@ -505,13 +505,20 @@ export class TradingBot extends EventEmitter {
       const marketData = await this.getMarketData(ticker);
       const marketTrend = undefined; // Skip TokenMetrics trend data
 
+      // Extract current price for backtesting
+      const currentPrice = marketData?.price || null;
+      if (currentPrice) {
+        console.log(`💵 Captured price for ${ticker}: $${currentPrice.toFixed(2)}`);
+      }
+
       // Generate trading decision
       const tradeSignal = await aiService.generateTradeDecision(sentiment, marketData, marketTrend);
       
       // Store processed content with AI analysis
       try {
+        const processedContentId = this.generateProcessingId(item);
         const processedContent: ProcessedContent = {
-          id: this.generateProcessingId(item),
+          id: processedContentId,
           reddit_id: item.id,
           subreddit: item.subreddit,
           author: item.author,
@@ -526,11 +533,31 @@ export class TradingBot extends EventEmitter {
           confidence_level: sentiment.confidence,
           processing_timestamp: Date.now(),
           trade_signal: tradeSignal.action !== 'HOLD' ? tradeSignal : undefined,
-          trade_reasoning: tradeSignal.action !== 'HOLD' ? tradeSignal.reasoning : undefined
+          trade_reasoning: tradeSignal.action !== 'HOLD' ? tradeSignal.reasoning : undefined,
+          price_at_analysis: currentPrice
         };
         
         await dataStorageService.storeProcessedContent(processedContent);
         console.log(`💾 Stored analysis for ${ticker} (ID: ${processedContent.id})`);
+        
+        // Save market snapshot for backtesting
+        if (currentPrice && marketData) {
+          try {
+            const snapshotId = `snapshot_${ticker}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+            await dataStorageService.saveMarketSnapshot({
+              id: snapshotId,
+              ticker: tickerValidationService.geminiSymbolToTicker(ticker),
+              price: currentPrice,
+              volume_24h: marketData.volume_24h,
+              market_cap: marketData.market_cap,
+              timestamp: Date.now(),
+              source: 'gemini',
+              processed_content_id: processedContentId
+            });
+          } catch (snapshotError) {
+            console.warn('Failed to save market snapshot:', snapshotError);
+          }
+        }
       } catch (storageError) {
         console.warn('Failed to store processed content:', storageError);
         // Don't fail the entire processing pipeline for storage issues

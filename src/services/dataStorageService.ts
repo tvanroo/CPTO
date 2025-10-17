@@ -24,6 +24,24 @@ export interface ProcessedContent {
   // Trade Decision (if any)
   trade_signal?: TradeSignal;
   trade_reasoning?: string;
+  
+  // Price tracking for backtesting
+  price_at_analysis?: number;
+  price_1h_later?: number;
+  price_24h_later?: number;
+  price_change_1h?: number;
+  price_change_24h?: number;
+}
+
+export interface MarketSnapshot {
+  id: string;
+  ticker: string;
+  price: number;
+  volume_24h?: number;
+  market_cap?: number;
+  timestamp: number;
+  source: string;
+  processed_content_id?: string;
 }
 
 export interface CurrencyWatchlistItem {
@@ -174,6 +192,27 @@ export class DataStorageService {
         ON trade_performance(executed_at DESC);
     `);
 
+    // Market price snapshots for backtesting
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS market_snapshots (
+        id TEXT PRIMARY KEY,
+        ticker TEXT NOT NULL,
+        price REAL NOT NULL,
+        volume_24h REAL,
+        market_cap REAL,
+        timestamp INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        processed_content_id TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_market_snapshots_ticker 
+        ON market_snapshots(ticker);
+      CREATE INDEX IF NOT EXISTS idx_market_snapshots_timestamp 
+        ON market_snapshots(timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_market_snapshots_ticker_time 
+        ON market_snapshots(ticker, timestamp DESC);
+    `);
+
     // Pending trades for manual approval mode
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS pending_trades (
@@ -207,16 +246,29 @@ export class DataStorageService {
   private async runMigrations(): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
-    // Check if reuse_count column exists, if not add it
     const tableInfo = await this.db.all(`PRAGMA table_info(processed_content)`);
-    const hasReuseCount = tableInfo.some((col: any) => col.name === 'reuse_count');
     
+    // Check if reuse_count column exists, if not add it
+    const hasReuseCount = tableInfo.some((col: any) => col.name === 'reuse_count');
     if (!hasReuseCount) {
       await this.db.exec(`
         ALTER TABLE processed_content 
         ADD COLUMN reuse_count INTEGER NOT NULL DEFAULT 0;
       `);
       console.log('✅ Added reuse_count column to processed_content table');
+    }
+
+    // Check if price tracking columns exist, if not add them
+    const hasPriceAtAnalysis = tableInfo.some((col: any) => col.name === 'price_at_analysis');
+    if (!hasPriceAtAnalysis) {
+      await this.db.exec(`
+        ALTER TABLE processed_content ADD COLUMN price_at_analysis REAL;
+        ALTER TABLE processed_content ADD COLUMN price_1h_later REAL;
+        ALTER TABLE processed_content ADD COLUMN price_24h_later REAL;
+        ALTER TABLE processed_content ADD COLUMN price_change_1h REAL;
+        ALTER TABLE processed_content ADD COLUMN price_change_24h REAL;
+      `);
+      console.log('✅ Added price tracking columns to processed_content table');
     }
   }
 
@@ -230,8 +282,8 @@ export class DataStorageService {
       INSERT OR REPLACE INTO processed_content (
         id, reddit_id, subreddit, author, title, content, url, created_utc, type,
         sentiment_score, sentiment_reasoning, extracted_tickers, confidence_level,
-        processing_timestamp, trade_signal, trade_reasoning, reuse_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        processing_timestamp, trade_signal, trade_reasoning, reuse_count, price_at_analysis
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       content.id,
       content.reddit_id,
@@ -249,7 +301,8 @@ export class DataStorageService {
       content.processing_timestamp,
       content.trade_signal ? JSON.stringify(content.trade_signal) : null,
       content.trade_reasoning,
-      0 // initial reuse_count
+      0, // initial reuse_count
+      content.price_at_analysis || null
     ]);
 
     // Update currency watchlist for any extracted tickers
@@ -1013,6 +1066,64 @@ export class DataStorageService {
       SET status = ?, processed_at = ?, approval_reason = ?
       WHERE id = ?
     `, [status, Date.now(), reason || null, tradeId]);
+  }
+
+  /**
+   * Save market price snapshot
+   */
+  async saveMarketSnapshot(snapshot: MarketSnapshot): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(`
+      INSERT INTO market_snapshots (
+        id, ticker, price, volume_24h, market_cap, timestamp, source, processed_content_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      snapshot.id,
+      snapshot.ticker,
+      snapshot.price,
+      snapshot.volume_24h || null,
+      snapshot.market_cap || null,
+      snapshot.timestamp,
+      snapshot.source,
+      snapshot.processed_content_id || null
+    ]);
+  }
+
+  /**
+   * Update future prices for processed content (1h and 24h later)
+   */
+  async updateFuturePrices(contentId: string, price_1h?: number, price_24h?: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const content = await this.db.get(
+      'SELECT price_at_analysis FROM processed_content WHERE id = ?',
+      [contentId]
+    );
+
+    if (!content || !content.price_at_analysis) return;
+
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if (price_1h !== undefined) {
+      updates.push('price_1h_later = ?', 'price_change_1h = ?');
+      params.push(price_1h, ((price_1h - content.price_at_analysis) / content.price_at_analysis) * 100);
+    }
+
+    if (price_24h !== undefined) {
+      updates.push('price_24h_later = ?', 'price_change_24h = ?');
+      params.push(price_24h, ((price_24h - content.price_at_analysis) / content.price_at_analysis) * 100);
+    }
+
+    if (updates.length === 0) return;
+
+    params.push(contentId);
+
+    await this.db.run(
+      `UPDATE processed_content SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
   }
 
   /**
