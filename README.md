@@ -1,5 +1,7 @@
 # CPTO - Crypto Trading Platform with Ongoing Analysis
 
+> For complete production deployment instructions, see DEPLOYMENT.md.
+
 A sophisticated cryptocurrency trading bot that combines Reddit sentiment analysis with market data to make automated trading decisions using AI.
 
 ## 🌟 Features
