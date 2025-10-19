@@ -687,7 +687,7 @@ export class WebServer {
     this.app.post('/api/tickers/disable/:ticker', async (req, res) => {
       try {
         const { ticker } = req.params;
-        const { reason } = req.body;
+        const reason = req.body?.reason;
         
         await dataStorageService.disableTicker(ticker.toUpperCase(), reason);
         
