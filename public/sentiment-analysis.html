@@ -375,6 +375,9 @@
             chart: null,
             abortController: null
         };
+        
+        // Ticker statistics storage
+        window.tickerStats = new Map(); // ticker -> analytics stats
 
         // Color palette for tickers
         const COLOR_PALETTE = [
@@ -391,21 +394,78 @@
         // Load tickers on page load
         async function loadTickers() {
             try {
-                const response = await fetch('/api/analytics/watchlist');
+                // Parse URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const preselectedTickers = urlParams.get('tickers')?.split(',').map(t => t.trim().toUpperCase()) || [];
+                const paramDays = urlParams.get('days');
+                const paramBase = urlParams.get('base');
+                
+                // Apply preselected settings
+                if (paramDays) {
+                    const daysToPreset = {
+                        '1': '24h',
+                        '7': '7d',
+                        '30': '30d'
+                    };
+                    const preset = daysToPreset[paramDays] || '7d';
+                    state.timeRange = { preset };
+                    
+                    // Update UI
+                    document.querySelectorAll('.time-range-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.range === preset);
+                    });
+                }
+                
+                if (paramBase) {
+                    state.baseCurrency = paramBase.toUpperCase();
+                    document.querySelectorAll('.currency-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.currency === paramBase.toUpperCase());
+                    });
+                }
+                
+                // Fetch ticker stats
+                const days = paramDays || 7;
+                const base = paramBase || 'USD';
+                
+                const response = await fetch(`/api/analytics/ticker-stats?days=${days}&base=${base}&minMentions=5&includeCorrelation=false`);
                 const data = await response.json();
                 
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to load tickers');
                 }
-
-                state.availableTickers = data.watchlist
-                    .map(item => item.ticker)
-                    .sort();
-
+                
+                // Store ticker stats
+                window.tickerStats.clear();
+                data.stats.forEach(stat => {
+                    window.tickerStats.set(stat.ticker, stat);
+                });
+                
+                state.availableTickers = data.stats.map(s => s.ticker).sort();
+                
                 renderTickerCheckboxes();
                 
-                // Restore saved state
-                restoreState();
+                // Apply preselection
+                if (preselectedTickers.length > 0) {
+                    preselectedTickers.forEach(ticker => {
+                        const checkbox = document.getElementById(`ticker-${ticker}`);
+                        if (checkbox) {
+                            checkbox.checked = true;
+                        }
+                    });
+                    handleTickerChange();
+                    
+                    // Auto-load chart after short delay
+                    setTimeout(() => {
+                        if (state.selectedTickers.length > 0) {
+                            loadChartData();
+                        }
+                    }, 500);
+                }
+                
+                // Restore saved state if no preselection
+                if (preselectedTickers.length === 0) {
+                    restoreState();
+                }
                 
             } catch (error) {
                 showError(`Failed to load tickers: ${error.message}`);
@@ -414,13 +474,45 @@
 
         function renderTickerCheckboxes() {
             const container = document.getElementById('tickerCheckboxes');
-            container.innerHTML = state.availableTickers.map(ticker => `
-                <div class="ticker-checkbox">
-                    <input type="checkbox" id="ticker-${ticker}" value="${ticker}" 
-                           onchange="handleTickerChange()">
-                    <label for="ticker-${ticker}">${ticker}</label>
+            
+            // Add sorting controls
+            const sortingHTML = `
+                <div style="margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                    <label style="font-size: 12px; font-weight: 600;">Sort by:</label>
+                    <select id="tickerSort" onchange="sortAndRenderTickers()" style="padding: 4px; margin-left: 5px; font-size: 12px;">
+                        <option value="ticker">Ticker (A-Z)</option>
+                        <option value="totalMentions">Mentions (High-Low)</option>
+                        <option value="avgSentiment">Sentiment (High-Low)</option>
+                        <option value="priceChangePercent">Price Change (High-Low)</option>
+                        <option value="dataPoints">Data Points (High-Low)</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="showTopNSelector()" style="margin-left: 10px; padding: 4px 8px; font-size: 12px;">
+                        🏆 Select Top N
+                    </button>
                 </div>
-            `).join('');
+            `;
+            
+            container.innerHTML = sortingHTML + state.availableTickers.map(ticker => {
+                const stats = window.tickerStats.get(ticker);
+                const mentions = stats ? stats.totalMentions : 0;
+                const dataPoints = stats ? stats.dataPoints : 0;
+                const hasData = stats && stats.hasData;
+                
+                const badgeStyle = hasData ? '' : 'opacity: 0.5; color: #999;';
+                
+                return `
+                    <div class="ticker-checkbox" style="${!hasData ? 'opacity: 0.6;' : ''}">
+                        <input type="checkbox" id="ticker-${ticker}" value="${ticker}" 
+                               onchange="handleTickerChange()">
+                        <label for="ticker-${ticker}">
+                            ${ticker}
+                            <span style="font-size: 10px; ${badgeStyle}">
+                                (${mentions}m, ${dataPoints}d)
+                            </span>
+                        </label>
+                    </div>
+                `;
+            }).join('');
         }
 
         function handleTickerChange() {
@@ -932,6 +1024,101 @@
             }
         }
 
+        // Sorting and Top N selection functions
+        function sortAndRenderTickers() {
+            const sortBy = document.getElementById('tickerSort').value;
+            
+            state.availableTickers.sort((a, b) => {
+                if (sortBy === 'ticker') {
+                    return a.localeCompare(b);
+                }
+                
+                const aStats = window.tickerStats.get(a);
+                const bStats = window.tickerStats.get(b);
+                
+                if (!aStats && !bStats) return 0;
+                if (!aStats) return 1;
+                if (!bStats) return -1;
+                
+                const aVal = aStats[sortBy] ?? -Infinity;
+                const bVal = bStats[sortBy] ?? -Infinity;
+                
+                return bVal - aVal; // Descending
+            });
+            
+            renderTickerCheckboxes();
+            
+            // Restore checkbox states
+            state.selectedTickers.forEach(ticker => {
+                const checkbox = document.getElementById(`ticker-${ticker}`);
+                if (checkbox) checkbox.checked = true;
+            });
+        }
+        
+        function showTopNSelector() {
+            const input = prompt(
+                'Select Top N Tickers\n\n' +
+                'Format: metric:limit\n' +
+                'Metrics: mentions, sentiment, price, dataPoints\n' +
+                'Limit: 1-10\n\n' +
+                'Examples:\n' +
+                '- price:10 (top 10 by price change)\n' +
+                '- mentions:5 (top 5 by mentions)',
+                'price:10'
+            );
+            
+            if (!input) return;
+            
+            const parts = input.split(':');
+            if (parts.length !== 2) {
+                alert('Invalid format. Use metric:limit');
+                return;
+            }
+            
+            const metricMap = {
+                mentions: 'totalMentions',
+                sentiment: 'avgSentiment',
+                price: 'priceChangePercent',
+                dataPoints: 'dataPoints'
+            };
+            
+            const metric = metricMap[parts[0]] || parts[0];
+            const limit = parseInt(parts[1]);
+            
+            if (isNaN(limit) || limit < 1 || limit > 10) {
+                alert('Limit must be between 1 and 10');
+                return;
+            }
+            
+            applyTopNSelection(metric, limit);
+        }
+        
+        function applyTopNSelection(metric, limit) {
+            // Sort tickers by metric
+            const sorted = state.availableTickers
+                .map(ticker => ({ ticker, stats: window.tickerStats.get(ticker) }))
+                .filter(item => item.stats && item.stats.hasData)
+                .sort((a, b) => {
+                    const aVal = a.stats[metric] ?? -Infinity;
+                    const bVal = b.stats[metric] ?? -Infinity;
+                    return bVal - aVal;
+                })
+                .slice(0, limit);
+            
+            // Clear all checkboxes
+            document.querySelectorAll('.ticker-checkbox input').forEach(cb => {
+                cb.checked = false;
+            });
+            
+            // Check top N
+            sorted.forEach(item => {
+                const checkbox = document.getElementById(`ticker-${item.ticker}`);
+                if (checkbox) checkbox.checked = true;
+            });
+            
+            handleTickerChange();
+        }
+        
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadTickers();

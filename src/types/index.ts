@@ -392,3 +392,25 @@ export interface SubredditValidationResult {
   isQuarantined?: boolean;
   isBanned?: boolean;
 }
+
+// Ticker Statistics types
+export interface TickerStatistics {
+  ticker: string;
+  avgSentiment: number;
+  priceChangePercent: number;
+  totalMentions: number;
+  dataPoints: number;
+  lastAnalyzedAt: number | null;
+  avgConfidence: number;
+  sentimentPriceCorrelation: number | null;
+  hasData: boolean;
+}
+
+export interface TickerStatisticsOptions {
+  days?: number;
+  baseCurrency?: 'USD' | 'BTC';
+  minMentions?: number;
+  includeCorrelation?: boolean;
+  limit?: number;
+  tickers?: string[];
+}

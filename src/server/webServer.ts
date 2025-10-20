@@ -1135,7 +1135,141 @@ export class WebServer {
       }
     });
     
-    // BACKTESTING ENDPOINTS
+    // TICKER STATISTICS ENDPOINTS
+    
+    // Get comprehensive ticker statistics
+    this.app.get('/api/analytics/ticker-stats', async (req, res) => {
+      try {
+        const days = parseInt(req.query.days as string) || 7;
+        const baseCurrency = (req.query.base as string)?.toUpperCase() || 'USD';
+        const minMentions = parseInt(req.query.minMentions as string) || 5;
+        const includeCorrelation = req.query.includeCorrelation === 'true';
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+        const tickersParam = req.query.tickers as string;
+        
+        // Validate base currency
+        if (baseCurrency !== 'USD' && baseCurrency !== 'BTC') {
+          return res.status(400).json({ error: 'baseCurrency must be USD or BTC' });
+        }
+        
+        // Parse tickers if provided
+        let tickers: string[] | undefined;
+        if (tickersParam) {
+          tickers = tickersParam.split(',').map(t => t.trim().toUpperCase());
+        }
+        
+        console.log(`📊 Fetching ticker statistics (days=${days}, base=${baseCurrency}, minMentions=${minMentions}, correlation=${includeCorrelation})`);
+        
+        const stats = await dataStorageService.getTickerStatistics({
+          days,
+          baseCurrency: baseCurrency as 'USD' | 'BTC',
+          minMentions,
+          includeCorrelation,
+          limit,
+          tickers
+        });
+        
+        return res.json({
+          stats,
+          count: stats.length,
+          options: {
+            days,
+            baseCurrency,
+            minMentions,
+            includeCorrelation
+          },
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('Ticker statistics error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get top N tickers by a specific metric
+    this.app.get('/api/analytics/ticker-stats/top', async (req, res) => {
+      try {
+        const metric = req.query.metric as string || 'totalMentions';
+        const order = (req.query.order as string || 'desc').toLowerCase();
+        const limit = parseInt(req.query.limit as string) || 10;
+        const days = parseInt(req.query.days as string) || 7;
+        const baseCurrency = (req.query.base as string)?.toUpperCase() || 'USD';
+        const minMentions = parseInt(req.query.minMentions as string) || 5;
+        
+        // Validate metric
+        const validMetrics = ['avgSentiment', 'priceChangePercent', 'totalMentions', 'correlation', 'dataPoints'];
+        if (!validMetrics.includes(metric)) {
+          return res.status(400).json({ 
+            error: `Invalid metric. Must be one of: ${validMetrics.join(', ')}` 
+          });
+        }
+        
+        // Validate order
+        if (order !== 'asc' && order !== 'desc') {
+          return res.status(400).json({ error: 'order must be asc or desc' });
+        }
+        
+        // Validate base currency
+        if (baseCurrency !== 'USD' && baseCurrency !== 'BTC') {
+          return res.status(400).json({ error: 'baseCurrency must be USD or BTC' });
+        }
+        
+        console.log(`🏆 Fetching top ${limit} tickers by ${metric} (${order})`);
+        
+        // Get all stats (with correlation if that's the metric)
+        const includeCorrelation = metric === 'correlation';
+        const allStats = await dataStorageService.getTickerStatistics({
+          days,
+          baseCurrency: baseCurrency as 'USD' | 'BTC',
+          minMentions,
+          includeCorrelation
+        });
+        
+        // Map metric name to actual property (correlation -> sentimentPriceCorrelation)
+        const metricKey = metric === 'correlation' ? 'sentimentPriceCorrelation' : metric;
+        
+        // Filter out tickers without data for this metric
+        const validStats = allStats.filter(stat => {
+          if (metricKey === 'sentimentPriceCorrelation') {
+            return stat.sentimentPriceCorrelation !== null && stat.hasData;
+          }
+          return stat.hasData;
+        });
+        
+        // Sort by the selected metric
+        validStats.sort((a, b) => {
+          const aVal = a[metricKey] ?? -Infinity;
+          const bVal = b[metricKey] ?? -Infinity;
+          return order === 'desc' ? bVal - aVal : aVal - bVal;
+        });
+        
+        // Take top N
+        const topStats = validStats.slice(0, limit);
+        
+        return res.json({
+          stats: topStats,
+          count: topStats.length,
+          metric,
+          order,
+          limit,
+          options: {
+            days,
+            baseCurrency,
+            minMentions
+          },
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('Top ticker statistics error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // SENTIMENT VS PRICE ANALYSIS ENDPOINTS
     
     // Run a backtest with specified configuration
     this.app.post('/api/backtesting/run', async (req, res) => {

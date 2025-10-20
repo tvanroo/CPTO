@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPTO - Ticker Management</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            border-bottom: 1px solid #eee;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0;
+            color: #2c3e50;
+        }
+        .nav-links {
+            margin-top: 10px;
+        }
+        .nav-links a {
+            color: #3498db;
+            text-decoration: none;
+            margin-right: 20px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .nav-links a:hover {
+            background-color: #ecf0f1;
+        }
+        .stats-card {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background: #2980b9;
+        }
+        .btn.secondary {
+            background: #95a5a6;
+        }
+        .btn.secondary:hover {
+            background: #7f8c8d;
+        }
+        .search-box {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            flex: 1;
+            max-width: 300px;
+        }
+        .ticker-test {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        .ticker-test input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100px;
+            text-transform: uppercase;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .table th, .table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+        }
+        .table tr:hover {
+            background: #f8f9fa;
+        }
+        .ticker-badge {
+            background: #3498db;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .symbol-badge {
+            background: #2ecc71;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .success {
+            background: #2ecc71;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .test-result {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .test-supported {
+            background: #d5f4e6;
+            color: #27ae60;
+            border: 1px solid #27ae60;
+        }
+        .test-unsupported {
+            background: #fadbd8;
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+        }
+        .filter-active {
+            display: block;
+        }
+        .filter-hidden {
+            display: none;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .page-btn {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .page-btn.active {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+        .page-btn:hover:not(.active) {
+            background: #ecf0f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 CPTO Ticker Management</h1>
+            <div class="nav-links">
+                <a href="/">🏠 Dashboard</a>
+                <a href="/tickers">📊 Ticker Management</a>
+                <a href="/backtesting.html">📈 Backtesting</a>
+                <a href="/sentiment-analysis">📉 Sentiment vs Price</a>
+            </div>
+        </div>
+
+        <div id="statsCard" class="stats-card">
+            <strong>Ticker Status:</strong> Loading...
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="refreshTickers()">🔄 Refresh Tickers</button>
+            <button class="btn secondary" onclick="showMappings()">📋 Show Mappings</button>
+            <input type="text" class="search-box" id="searchBox" placeholder="Search tickers..." onkeyup="filterTickers()">
+        </div>
+
+        <div class="ticker-test">
+            <input type="text" id="testTicker" placeholder="BTC" maxlength="10">
+            <button class="btn" onclick="testTicker()">Test Ticker</button>
+            <div id="testResult"></div>
+        </div>
+
+        <div id="messages"></div>
+
+        <div id="loading" class="loading">Loading supported tickers...</div>
+
+        <div id="tickerContent" style="display: none;">
+            <h3>Supported Tickers (<span id="tickerCount">0</span>)</h3>
+            <table class="table" id="tickerTable">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Gemini Symbol</th>
+                        <th>Trading Pair</th>
+                        <th>Enabled</th>
+                    </tr>
+                </thead>
+                <tbody id="tickerTableBody">
+                </tbody>
+            </table>
+            <div id="pagination" class="pagination"></div>
+        </div>
+    </div>
+
+    <script>
+        let allTickers = [];
+        let filteredTickers = [];
+        let disabledTickers = new Set();
+        let currentPage = 1;
+        const tickersPerPage = 50;
+
+        function showMessage(message, type = 'success') {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = `<div class="${type}">${message}</div>`;
+            setTimeout(() => {
+                messagesDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        function showError(message) {
+            showMessage(message, 'error');
+        }
+
+        async function loadTickers() {
+            try {
+                const [tickersResponse, disabledResponse] = await Promise.all([
+                    fetch('/api/tickers/supported'),
+                    fetch('/api/tickers/disabled')
+                ]);
+                
+                const tickersData = await tickersResponse.json();
+                const disabledData = await disabledResponse.json();
+                
+                if (!tickersResponse.ok) {
+                    throw new Error(tickersData.error || 'Failed to load tickers');
+                }
+
+                allTickers = tickersData.symbols;
+                filteredTickers = [...allTickers];
+                disabledTickers = new Set(disabledData.disabledTickers || []);
+                
+                updateStats(tickersData);
+                displayTickers();
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('tickerContent').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading tickers:', error);
+                showError('Error loading tickers: ' + error.message);
+                document.getElementById('loading').innerHTML = 'Error loading tickers';
+            }
+        }
+
+        function updateStats(data) {
+            const statsCard = document.getElementById('statsCard');
+            statsCard.innerHTML = `
+                <strong>Ticker Status:</strong> 
+                ${data.totalSymbols} supported tickers | 
+                Cache updated: ${new Date(data.cacheInfo.lastUpdated).toLocaleString()} 
+                (${data.cacheInfo.cacheAge} ago)
+            `;
+        }
+
+        function displayTickers() {
+            const startIndex = (currentPage - 1) * tickersPerPage;
+            const endIndex = startIndex + tickersPerPage;
+            const pageData = filteredTickers.slice(startIndex, endIndex);
+            
+            const tbody = document.getElementById('tickerTableBody');
+            tbody.innerHTML = '';
+            
+            pageData.forEach(ticker => {
+                const isDisabled = disabledTickers.has(ticker.ticker);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><span class="ticker-badge">${ticker.ticker}</span></td>
+                    <td><span class="symbol-badge">${ticker.geminiSymbol}</span></td>
+                    <td>${ticker.tradingPair}</td>
+                    <td>
+                        <input type="checkbox" 
+                               id="toggle-${ticker.ticker}" 
+                               ${isDisabled ? '' : 'checked'} 
+                               onchange="toggleTicker('${ticker.ticker}', this.checked)">
+                        <label for="toggle-${ticker.ticker}" style="margin-left: 5px; cursor: pointer;">
+                            ${isDisabled ? '❌ Disabled' : '✅ Enabled'}
+                        </label>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            document.getElementById('tickerCount').textContent = filteredTickers.length;
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(filteredTickers.length / tickersPerPage);
+            const paginationDiv = document.getElementById('pagination');
+            paginationDiv.innerHTML = '';
+            
+            if (totalPages <= 1) return;
+            
+            // Previous button
+            if (currentPage > 1) {
+                const prevBtn = document.createElement('button');
+                prevBtn.className = 'page-btn';
+                prevBtn.textContent = '← Previous';
+                prevBtn.onclick = () => goToPage(currentPage - 1);
+                paginationDiv.appendChild(prevBtn);
+            }
+            
+            // Page numbers
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = 'page-btn' + (i === currentPage ? ' active' : '');
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => goToPage(i);
+                paginationDiv.appendChild(pageBtn);
+            }
+            
+            // Next button
+            if (currentPage < totalPages) {
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'page-btn';
+                nextBtn.textContent = 'Next →';
+                nextBtn.onclick = () => goToPage(currentPage + 1);
+                paginationDiv.appendChild(nextBtn);
+            }
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            displayTickers();
+        }
+
+        function filterTickers() {
+            const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+            if (!searchTerm) {
+                filteredTickers = [...allTickers];
+            } else {
+                filteredTickers = allTickers.filter(ticker => 
+                    ticker.ticker.toLowerCase().includes(searchTerm) ||
+                    ticker.geminiSymbol.toLowerCase().includes(searchTerm) ||
+                    ticker.tradingPair.toLowerCase().includes(searchTerm)
+                );
+            }
+            currentPage = 1;
+            displayTickers();
+        }
+
+        async function refreshTickers() {
+            try {
+                showMessage('Refreshing ticker data from Gemini...', 'success');
+                
+                const response = await fetch('/api/tickers/refresh', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to refresh tickers');
+                }
+                
+                showMessage(`Successfully refreshed ${data.symbolCount} tickers`);
+                await loadTickers(); // Reload the data
+                
+            } catch (error) {
+                console.error('Error refreshing tickers:', error);
+                showError('Error refreshing tickers: ' + error.message);
+            }
+        }
+
+        async function testTicker() {
+            const ticker = document.getElementById('testTicker').value.trim().toUpperCase();
+            const resultDiv = document.getElementById('testResult');
+            
+            if (!ticker) {
+                resultDiv.innerHTML = '<div class="test-result test-unsupported">Please enter a ticker symbol</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/tickers/test/${ticker}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Test failed');
+                }
+                
+                const cssClass = data.isSupported ? 'test-supported' : 'test-unsupported';
+                const symbol = data.geminiSymbol ? ` → ${data.geminiSymbol}` : '';
+                resultDiv.innerHTML = `<div class="test-result ${cssClass}">${data.message}${symbol}</div>`;
+                
+            } catch (error) {
+                console.error('Error testing ticker:', error);
+                resultDiv.innerHTML = '<div class="test-result test-unsupported">Error testing ticker</div>';
+            }
+        }
+
+        async function showMappings() {
+            try {
+                const response = await fetch('/api/tickers/mappings');
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load mappings');
+                }
+                
+                let mappingText = 'Common Ticker Mappings:\\n\\n';
+                data.mappings.forEach(mapping => {
+                    mappingText += `${mapping.ticker}: ${mapping.geminiSymbols.join(', ')} (Primary: ${mapping.primary})\\n`;
+                });
+                
+                alert(mappingText);
+                
+            } catch (error) {
+                console.error('Error loading mappings:', error);
+                showError('Error loading mappings: ' + error.message);
+            }
+        }
+
+        async function toggleTicker(ticker, enabled) {
+            try {
+                const endpoint = enabled ? 'enable' : 'disable';
+                const response = await fetch(`/api/tickers/${endpoint}/${ticker}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || `Failed to ${endpoint} ticker`);
+                }
+                
+                // Update local state
+                if (enabled) {
+                    disabledTickers.delete(ticker);
+                } else {
+                    disabledTickers.add(ticker);
+                }
+                
+                showMessage(`${ticker} ${enabled ? 'enabled' : 'disabled'}`);
+                displayTickers(); // Refresh display
+                
+            } catch (error) {
+                console.error(`Error toggling ticker:`, error);
+                showError(`Error: ` + error.message);
+                // Revert checkbox
+                const checkbox = document.getElementById(`toggle-${ticker}`);
+                if (checkbox) checkbox.checked = !enabled;
+            }
+        }
+
+        // Allow testing ticker on Enter key
+        document.getElementById('testTicker').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testTicker();
+            }
+        });
+
+        // Load tickers on page load
+        document.addEventListener('DOMContentLoaded', loadTickers);
+    </script>
+</body>
+</html>

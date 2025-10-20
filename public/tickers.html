@@ -331,6 +331,37 @@
                 <button class="btn" onclick="testTicker()">Test Ticker</button>
                 <div id="testResult"></div>
             </div>
+            
+            <!-- Analytics Controls -->
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px;">📊 Analytics & Selection</h4>
+                <div class="controls">
+                    <label style="font-size: 13px;">
+                        Time Range:
+                        <select id="analyticsTimeRange" onchange="loadTickerAnalytics()" style="padding: 5px; margin-left: 5px;">
+                            <option value="1">24 Hours</option>
+                            <option value="7" selected>7 Days</option>
+                            <option value="30">30 Days</option>
+                        </select>
+                    </label>
+                    <label style="font-size: 13px; margin-left: 15px;">
+                        Base Currency:
+                        <select id="analyticsBaseCurrency" onchange="loadTickerAnalytics()" style="padding: 5px; margin-left: 5px;">
+                            <option value="USD" selected>USD</option>
+                            <option value="BTC">BTC</option>
+                        </select>
+                    </label>
+                    <button class="btn" onclick="loadTickerAnalytics()" style="margin-left: 15px;">
+                        <i class="fas fa-sync"></i> Refresh Analytics
+                    </button>
+                    <button class="btn secondary" onclick="showTopTickersModal()" style="margin-left: 5px;">
+                        🏆 Select Top N
+                    </button>
+                    <button class="btn secondary" onclick="openSelectedInChart()" style="margin-left: 5px;" id="openChartBtn">
+                        📈 Open Selected in Chart
+                    </button>
+                </div>
+            </div>
 
             <div id="loading" class="loading">Loading supported tickers...</div>
 
@@ -339,10 +370,16 @@
                 <table class="table" id="tickerTable">
                     <thead>
                         <tr>
-                            <th>Ticker</th>
+                            <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"></th>
+                            <th onclick="sortTickerTable('ticker')" style="cursor: pointer;">Ticker <i class="fas fa-sort"></i></th>
                             <th>Gemini Symbol</th>
-                            <th>Trading Pair</th>
+                            <th onclick="sortTickerTable('avgSentiment')" style="cursor: pointer;">Avg Sentiment <i class="fas fa-sort"></i></th>
+                            <th onclick="sortTickerTable('priceChangePercent')" style="cursor: pointer;">Price Change % <i class="fas fa-sort"></i></th>
+                            <th onclick="sortTickerTable('totalMentions')" style="cursor: pointer;">Mentions <i class="fas fa-sort"></i></th>
+                            <th onclick="sortTickerTable('sentimentPriceCorrelation')" style="cursor: pointer;">Correlation <i class="fas fa-sort"></i></th>
+                            <th onclick="sortTickerTable('dataPoints')" style="cursor: pointer;">Data Points <i class="fas fa-sort"></i></th>
                             <th>Enabled</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="tickerTableBody"></tbody>
@@ -408,6 +445,12 @@
         let disabledTickers = new Set();
         let currentPage = 1;
         const tickersPerPage = 50;
+        
+        // Analytics Variables
+        let tickerAnalytics = new Map(); // ticker -> analytics data
+        let analyticsLoaded = false;
+        let currentSort = { column: null, ascending: true };
+        let selectedTickers = new Set();
 
         // Subreddits Tab Variables
         let allSubreddits = [];
@@ -496,11 +539,38 @@
             
             pageData.forEach(ticker => {
                 const isDisabled = disabledTickers.has(ticker.ticker);
+                const isSelected = selectedTickers.has(ticker.ticker);
+                const analytics = tickerAnalytics.get(ticker.ticker);
                 const row = document.createElement('tr');
+                
+                // Reduce opacity for tickers with no data
+                if (analyticsLoaded && analytics && !analytics.hasData) {
+                    row.style.opacity = '0.5';
+                }
+                
                 row.innerHTML = `
+                    <td>
+                        <input type="checkbox" 
+                               ${isSelected ? 'checked' : ''} 
+                               onchange="toggleTickerSelection('${ticker.ticker}')">
+                    </td>
                     <td><span class="badge ticker">${ticker.ticker}</span></td>
                     <td><span class="badge symbol">${ticker.geminiSymbol}</span></td>
-                    <td>${ticker.tradingPair}</td>
+                    <td style="text-align: center;">
+                        ${analytics && analytics.hasData ? analytics.avgSentiment.toFixed(3) : 'N/A'}
+                    </td>
+                    <td style="text-align: center;">
+                        ${analytics && analytics.hasData ? analytics.priceChangePercent.toFixed(2) + '%' : 'N/A'}
+                    </td>
+                    <td style="text-align: center;">
+                        ${analytics ? analytics.totalMentions : 'N/A'}
+                    </td>
+                    <td style="text-align: center;">
+                        ${analytics && analytics.sentimentPriceCorrelation !== null ? analytics.sentimentPriceCorrelation.toFixed(3) : 'N/A'}
+                    </td>
+                    <td style="text-align: center;">
+                        ${analytics ? analytics.dataPoints : 'N/A'}
+                    </td>
                     <td>
                         <label class="switch">
                             <input type="checkbox" 
@@ -511,12 +581,23 @@
                         </label>
                         <span style="margin-left: 10px;">${isDisabled ? '❌ Disabled' : '✅ Enabled'}</span>
                     </td>
+                    <td>
+                        ${analytics ? `<button class="btn small" onclick="viewTickerDetails('${ticker.ticker}')">👁️ Details</button>` : ''}
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
             
             document.getElementById('tickerCount').textContent = filteredTickers.length;
             updatePagination();
+            updateOpenChartButton();
+            
+            // Update select all checkbox
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            if (selectAllCheckbox) {
+                const allPageSelected = pageData.every(t => selectedTickers.has(t.ticker));
+                selectAllCheckbox.checked = allPageSelected && pageData.length > 0;
+            }
         }
 
         function updatePagination() {
@@ -675,6 +756,238 @@
                 const checkbox = document.getElementById(`toggle-${ticker}`);
                 if (checkbox) checkbox.checked = !enabled;
             }
+        }
+        
+        // ============= ANALYTICS FUNCTIONS =============
+        async function loadTickerAnalytics() {
+            try {
+                const days = document.getElementById('analyticsTimeRange').value;
+                const base = document.getElementById('analyticsBaseCurrency').value;
+                
+                showMessage('Loading analytics...', 'success');
+                
+                const response = await fetch(`/api/analytics/ticker-stats?days=${days}&base=${base}&minMentions=5&includeCorrelation=false`);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load analytics');
+                }
+                
+                // Store analytics data
+                tickerAnalytics.clear();
+                data.stats.forEach(stat => {
+                    tickerAnalytics.set(stat.ticker, stat);
+                });
+                
+                analyticsLoaded = true;
+                
+                // Persist preferences
+                localStorage.setItem('tickerAnalytics_days', days);
+                localStorage.setItem('tickerAnalytics_base', base);
+                
+                // Refresh display
+                displayTickers();
+                
+                showMessage(`Analytics loaded for ${data.count} tickers`);
+                
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+                showError('Error loading analytics: ' + error.message);
+            }
+        }
+        
+        function sortTickerTable(column) {
+            if (currentSort.column === column) {
+                currentSort.ascending = !currentSort.ascending;
+            } else {
+                currentSort.column = column;
+                currentSort.ascending = false; // Default to descending for metrics
+            }
+            
+            // Sort filteredTickers
+            filteredTickers.sort((a, b) => {
+                let aVal, bVal;
+                
+                if (column === 'ticker') {
+                    aVal = a.ticker;
+                    bVal = b.ticker;
+                    return currentSort.ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                } else {
+                    // Analytics columns
+                    const aAnalytics = tickerAnalytics.get(a.ticker);
+                    const bAnalytics = tickerAnalytics.get(b.ticker);
+                    
+                    if (!aAnalytics && !bAnalytics) return 0;
+                    if (!aAnalytics) return 1;
+                    if (!bAnalytics) return -1;
+                    
+                    aVal = aAnalytics[column] ?? -Infinity;
+                    bVal = bAnalytics[column] ?? -Infinity;
+                    
+                    return currentSort.ascending ? aVal - bVal : bVal - aVal;
+                }
+            });
+            
+            currentPage = 1;
+            displayTickers();
+        }
+        
+        function toggleSelectAll() {
+            const checkbox = document.getElementById('selectAllCheckbox');
+            const pageData = filteredTickers.slice(
+                (currentPage - 1) * tickersPerPage,
+                currentPage * tickersPerPage
+            );
+            
+            if (checkbox.checked) {
+                pageData.forEach(ticker => selectedTickers.add(ticker.ticker));
+            } else {
+                pageData.forEach(ticker => selectedTickers.delete(ticker.ticker));
+            }
+            
+            displayTickers();
+        }
+        
+        function toggleTickerSelection(ticker) {
+            if (selectedTickers.has(ticker)) {
+                selectedTickers.delete(ticker);
+            } else {
+                selectedTickers.add(ticker);
+            }
+            updateOpenChartButton();
+        }
+        
+        function updateOpenChartButton() {
+            const btn = document.getElementById('openChartBtn');
+            if (btn) {
+                btn.disabled = selectedTickers.size === 0 || selectedTickers.size > 10;
+                if (selectedTickers.size > 10) {
+                    btn.textContent = `📈 Too many (${selectedTickers.size}/10)`;
+                } else if (selectedTickers.size > 0) {
+                    btn.textContent = `📈 Open ${selectedTickers.size} in Chart`;
+                } else {
+                    btn.textContent = '📈 Open Selected in Chart';
+                }
+            }
+        }
+        
+        function openSelectedInChart() {
+            if (selectedTickers.size === 0 || selectedTickers.size > 10) {
+                showError('Please select 1-10 tickers');
+                return;
+            }
+            
+            const days = document.getElementById('analyticsTimeRange').value;
+            const base = document.getElementById('analyticsBaseCurrency').value;
+            const tickers = Array.from(selectedTickers).join(',');
+            
+            window.location.href = `/sentiment-analysis?tickers=${tickers}&days=${days}&base=${base}`;
+        }
+        
+        function showTopTickersModal() {
+            const modal = prompt(
+                'Select Top N Tickers\n\n' +
+                'Format: metric:order:limit\n' +
+                'Metrics: sentiment, price, mentions, correlation, dataPoints\n' +
+                'Order: asc or desc\n' +
+                'Limit: 1-20\n\n' +
+                'Examples:\n' +
+                '- price:desc:10 (top 10 by price change)\n' +
+                '- mentions:desc:5 (top 5 by mentions)\n' +
+                '- correlation:desc:10 (top 10 by correlation)',
+                'price:desc:10'
+            );
+            
+            if (!modal) return;
+            
+            const parts = modal.split(':');
+            if (parts.length !== 3) {
+                showError('Invalid format. Use metric:order:limit');
+                return;
+            }
+            
+            const metricMap = {
+                sentiment: 'avgSentiment',
+                price: 'priceChangePercent',
+                mentions: 'totalMentions',
+                correlation: 'correlation',
+                dataPoints: 'dataPoints'
+            };
+            
+            const metric = metricMap[parts[0]] || parts[0];
+            const order = parts[1].toLowerCase();
+            const limit = parseInt(parts[2]);
+            
+            if (order !== 'asc' && order !== 'desc') {
+                showError('Order must be asc or desc');
+                return;
+            }
+            
+            if (isNaN(limit) || limit < 1 || limit > 20) {
+                showError('Limit must be between 1 and 20');
+                return;
+            }
+            
+            selectTopTickers(metric, order, limit);
+        }
+        
+        async function selectTopTickers(metric, order, limit) {
+            try {
+                const days = document.getElementById('analyticsTimeRange').value;
+                const base = document.getElementById('analyticsBaseCurrency').value;
+                
+                showMessage(`Fetching top ${limit} tickers by ${metric}...`, 'success');
+                
+                const response = await fetch(
+                    `/api/analytics/ticker-stats/top?metric=${metric}&order=${order}&limit=${limit}&days=${days}&base=${base}`
+                );
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to get top tickers');
+                }
+                
+                if (data.count === 0) {
+                    showError('No tickers found matching criteria');
+                    return;
+                }
+                
+                // Navigate to chart with these tickers
+                const tickers = data.stats.map(s => s.ticker).join(',');
+                window.location.href = `/sentiment-analysis?tickers=${tickers}&days=${days}&base=${base}`;
+                
+            } catch (error) {
+                console.error('Error selecting top tickers:', error);
+                showError('Error: ' + error.message);
+            }
+        }
+        
+        function viewTickerDetails(ticker) {
+            const analytics = tickerAnalytics.get(ticker);
+            
+            if (!analytics) {
+                alert(`No analytics data available for ${ticker}`);
+                return;
+            }
+            
+            const lastAnalyzed = analytics.lastAnalyzedAt 
+                ? new Date(analytics.lastAnalyzedAt).toLocaleString()
+                : 'Never';
+            
+            const details = `
+📊 Ticker Analytics: ${ticker}
+
+` +
+            `Avg Sentiment: ${analytics.hasData ? analytics.avgSentiment.toFixed(3) : 'N/A'}\n` +
+            `Price Change: ${analytics.hasData ? analytics.priceChangePercent.toFixed(2) + '%' : 'N/A'}\n` +
+            `Total Mentions: ${analytics.totalMentions}\n` +
+            `Data Points: ${analytics.dataPoints}\n` +
+            `Avg Confidence: ${analytics.hasData ? (analytics.avgConfidence * 100).toFixed(1) + '%' : 'N/A'}\n` +
+            `Correlation: ${analytics.sentimentPriceCorrelation !== null ? analytics.sentimentPriceCorrelation.toFixed(3) : 'N/A'}\n` +
+            `Last Analyzed: ${lastAnalyzed}\n` +
+            `Has Sufficient Data: ${analytics.hasData ? 'Yes' : 'No'}`;
+            
+            alert(details);
         }
 
         // ============= SUBREDDITS TAB FUNCTIONS =============
@@ -1023,7 +1336,21 @@
 
         // ============= INITIALIZATION =============
         document.addEventListener('DOMContentLoaded', () => {
-            loadTickers();
+            // Restore analytics preferences
+            const savedDays = localStorage.getItem('tickerAnalytics_days');
+            const savedBase = localStorage.getItem('tickerAnalytics_base');
+            
+            if (savedDays) {
+                document.getElementById('analyticsTimeRange').value = savedDays;
+            }
+            if (savedBase) {
+                document.getElementById('analyticsBaseCurrency').value = savedBase;
+            }
+            
+            loadTickers().then(() => {
+                // Auto-load analytics after tickers are loaded
+                loadTickerAnalytics();
+            });
             
             // Allow testing ticker on Enter key
             document.getElementById('testTicker').addEventListener('keypress', function(e) {

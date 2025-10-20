@@ -1119,6 +1119,193 @@ export class DataStorageService {
   }
   
   /**
+   * Get comprehensive ticker statistics for analytics
+   */
+  async getTickerStatistics(options: {
+    days?: number;
+    baseCurrency?: 'USD' | 'BTC';
+    minMentions?: number;
+    includeCorrelation?: boolean;
+    limit?: number;
+    tickers?: string[];
+  } = {}): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const {
+      days = 7,
+      baseCurrency = 'USD',
+      minMentions = 5,
+      includeCorrelation = false,
+      limit,
+      tickers
+    } = options;
+    
+    const cutoffTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    
+    // Step 1: Determine ticker set
+    let tickerSet: Set<string>;
+    
+    if (tickers && tickers.length > 0) {
+      tickerSet = new Set(tickers.map(t => t.toUpperCase()));
+    } else {
+      // Get tickers from watchlist
+      const watchlistRows = await this.db.all(
+        'SELECT DISTINCT ticker FROM currency_watchlist'
+      );
+      
+      // Get recent tickers from processed_content
+      const recentTickerRows = await this.db.all(`
+        SELECT DISTINCT json_each.value as ticker
+        FROM processed_content, json_each(extracted_tickers)
+        WHERE processing_timestamp >= ?
+      `, [cutoffTime]);
+      
+      tickerSet = new Set<string>();
+      watchlistRows.forEach(row => tickerSet.add(row.ticker));
+      recentTickerRows.forEach(row => tickerSet.add(row.ticker));
+    }
+    
+    const tickerList = Array.from(tickerSet);
+    
+    // Step 2: Process each ticker
+    const results: any[] = [];
+    
+    for (const ticker of tickerList) {
+      try {
+        // Get sentiment data
+        const sentimentRows = await this.db.all(`
+          SELECT sentiment_score, confidence_level, processing_timestamp
+          FROM processed_content
+          WHERE extracted_tickers LIKE ? AND processing_timestamp >= ?
+          ORDER BY processing_timestamp ASC
+        `, [`%"${ticker}"%`, cutoffTime]);
+        
+        const totalMentions = sentimentRows.length;
+        const hasData = totalMentions >= minMentions;
+        
+        let avgSentiment = 0;
+        let avgConfidence = 0;
+        let lastAnalyzedAt: number | null = null;
+        let dataPoints = 0;
+        
+        if (sentimentRows.length > 0) {
+          avgSentiment = sentimentRows.reduce((sum, row) => sum + row.sentiment_score, 0) / sentimentRows.length;
+          avgConfidence = sentimentRows.reduce((sum, row) => sum + row.confidence_level, 0) / sentimentRows.length;
+          lastAnalyzedAt = sentimentRows[sentimentRows.length - 1].processing_timestamp;
+          dataPoints = sentimentRows.length;
+        }
+        
+        // Get price data
+        const priceRows = await this.db.all(`
+          SELECT price, timestamp
+          FROM market_snapshots
+          WHERE ticker = ? AND timestamp >= ? AND timestamp <= ?
+          ORDER BY timestamp ASC
+        `, [ticker, cutoffTime, Date.now()]);
+        
+        let priceChangePercent = 0;
+        if (priceRows.length >= 2) {
+          const firstPrice = priceRows[0].price;
+          const lastPrice = priceRows[priceRows.length - 1].price;
+          priceChangePercent = ((lastPrice - firstPrice) / firstPrice) * 100;
+        }
+        
+        // Calculate correlation if requested and data is sufficient
+        let sentimentPriceCorrelation: number | null = null;
+        
+        if (includeCorrelation && hasData && priceRows.length >= 3) {
+          // Build time-aligned sentiment-price pairs
+          const validPairs: Array<{ sentiment: number; priceReturn: number }> = [];
+          
+          // Create a map of timestamps to prices for faster lookup
+          const priceMap = new Map<number, number>();
+          priceRows.forEach(row => priceMap.set(row.timestamp, row.price));
+          
+          // For each sentiment point, find nearest price within 1 hour window
+          for (let i = 1; i < sentimentRows.length; i++) {
+            const sentiment = sentimentRows[i].sentiment_score;
+            const timestamp = sentimentRows[i].processing_timestamp;
+            
+            // Find closest price within 1 hour
+            let closestPrice: number | null = null;
+            let minDiff = 60 * 60 * 1000; // 1 hour
+            
+            for (const [priceTime, price] of priceMap.entries()) {
+              const diff = Math.abs(priceTime - timestamp);
+              if (diff < minDiff) {
+                minDiff = diff;
+                closestPrice = price;
+              }
+            }
+            
+            // Also need previous price for return calculation
+            const prevTimestamp = sentimentRows[i - 1].processing_timestamp;
+            let prevPrice: number | null = null;
+            minDiff = 60 * 60 * 1000;
+            
+            for (const [priceTime, price] of priceMap.entries()) {
+              const diff = Math.abs(priceTime - prevTimestamp);
+              if (diff < minDiff) {
+                minDiff = diff;
+                prevPrice = price;
+              }
+            }
+            
+            if (closestPrice && prevPrice && prevPrice > 0) {
+              const priceReturn = Math.log(closestPrice / prevPrice);
+              validPairs.push({ sentiment, priceReturn });
+            }
+          }
+          
+          // Calculate correlation if we have enough pairs
+          if (validPairs.length >= 3) {
+            const sentiments = validPairs.map(p => p.sentiment);
+            const returns = validPairs.map(p => p.priceReturn);
+            sentimentPriceCorrelation = this.calculateCorrelation(sentiments, returns);
+          }
+        }
+        
+        results.push({
+          ticker,
+          avgSentiment,
+          priceChangePercent,
+          totalMentions,
+          dataPoints,
+          lastAnalyzedAt,
+          avgConfidence,
+          sentimentPriceCorrelation,
+          hasData
+        });
+        
+      } catch (error) {
+        console.error(`Error processing ticker ${ticker}:`, error);
+        // Return minimal data on error
+        results.push({
+          ticker,
+          avgSentiment: 0,
+          priceChangePercent: 0,
+          totalMentions: 0,
+          dataPoints: 0,
+          lastAnalyzedAt: null,
+          avgConfidence: 0,
+          sentimentPriceCorrelation: null,
+          hasData: false
+        });
+      }
+    }
+    
+    // Sort by totalMentions descending
+    results.sort((a, b) => b.totalMentions - a.totalMentions);
+    
+    // Apply limit if specified
+    if (limit && limit > 0) {
+      return results.slice(0, limit);
+    }
+    
+    return results;
+  }
+  
+  /**
    * Get trading statistics from database for bot startup
    */
   async getTradingStatsFromDB(): Promise<{
