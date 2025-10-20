@@ -12,6 +12,7 @@ import { config } from '../config';
 import { tradingBot } from '../services/tradingBot';
 import { geminiClient } from '../clients/geminiClient';
 import { tokenMetricsClient } from '../clients/tokenMetricsClient';
+import { redditClient } from '../clients/redditClient';
 import { aiService } from '../services/aiService';
 import { pendingTradesManager } from '../services/pendingTradesManager';
 import { dataStorageService } from '../services/dataStorageService';
