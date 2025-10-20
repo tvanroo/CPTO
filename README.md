@@ -7,9 +7,11 @@ A sophisticated cryptocurrency trading bot that combines Reddit sentiment analys
 ## 🌟 Features
 
 - **Reddit Sentiment Analysis**: Real-time monitoring of cryptocurrency discussions on Reddit
+- **Dynamic Subreddit Management**: Add, remove, and toggle subreddits without restarting the bot (see [docs/SUBREDDIT_MANAGEMENT.md](docs/SUBREDDIT_MANAGEMENT.md))
 - **AI-Powered Decision Making**: Uses OpenAI GPT-4 Turbo for sentiment analysis and trading decisions
 - **Market Data Integration**: Connects to TokenMetrics API for real-time market data and trading
 - **Automated Trading**: Executes trades based on sentiment and market analysis
+- **Web Interface**: Real-time dashboard for ticker and subreddit management with WebSocket updates
 - **Background Processing**: Runs as a background service with PM2 orchestration
 - **Rate Limiting**: Built-in rate limiting and API management
 - **Error Handling**: Comprehensive error handling with retry mechanisms
