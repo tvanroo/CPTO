@@ -250,6 +250,33 @@ export class DataStorageService {
     `);
 
     console.log('✅ Database tables created/verified');
+    
+    // Create indexes for performance
+    await this.createPerformanceIndexes();
+  }
+  
+  /**
+   * Create performance indexes
+   */
+  private async createPerformanceIndexes(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    // Indexes for sentiment/price analysis queries
+    await this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_processed_content_ts 
+        ON processed_content(processing_timestamp);
+      
+      CREATE INDEX IF NOT EXISTS idx_market_snapshots_ts 
+        ON market_snapshots(timestamp);
+      
+      CREATE INDEX IF NOT EXISTS idx_market_snapshots_ticker_ts 
+        ON market_snapshots(ticker, timestamp);
+      
+      CREATE INDEX IF NOT EXISTS idx_trade_performance_ticker_ts 
+        ON trade_performance(ticker, executed_at);
+    `);
+    
+    console.log('✅ Performance indexes created/verified');
   }
 
   /**
@@ -1254,6 +1281,322 @@ export class DataStorageService {
     );
 
     console.log(`🧹 Cleaned up data older than ${daysToKeep} days`);
+  }
+
+  /**
+   * Get sentiment vs price correlation data for visualization
+   */
+  async getSentimentPriceCorrelation(options: {
+    tickers: string[];
+    startTime: number;
+    endTime: number;
+    interval: 'hourly' | 'daily';
+    baseCurrency: 'USD' | 'BTC';
+  }): Promise<any> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const { tickers, startTime, endTime, interval, baseCurrency } = options;
+    
+    // Helper to create time buckets
+    const getBucketStart = (timestamp: number): number => {
+      const date = new Date(timestamp);
+      if (interval === 'hourly') {
+        date.setMinutes(0, 0, 0);
+      } else {
+        date.setHours(0, 0, 0, 0);
+      }
+      return date.getTime();
+    };
+    
+    // Query sentiment data
+    const placeholders = tickers.map(() => '?').join(',');
+    const sentimentRows = await this.db.all(`
+      SELECT 
+        extracted_tickers,
+        processing_timestamp,
+        sentiment_score,
+        confidence_level
+      FROM processed_content
+      WHERE processing_timestamp >= ? AND processing_timestamp <= ?
+      ORDER BY processing_timestamp ASC
+    `, [startTime, endTime]);
+    
+    // Query market snapshots
+    const priceRows = await this.db.all(`
+      SELECT 
+        ticker,
+        timestamp,
+        price
+      FROM market_snapshots
+      WHERE ticker IN (${placeholders})
+        AND timestamp >= ? AND timestamp <= ?
+      ORDER BY timestamp ASC
+    `, [...tickers.map(t => t.toUpperCase()), startTime, endTime]);
+    
+    // Query trade signals
+    const tradeRows = await this.db.all(`
+      SELECT 
+        ticker,
+        executed_at,
+        action,
+        reasoning
+      FROM trade_performance
+      WHERE ticker IN (${placeholders})
+        AND executed_at >= ? AND executed_at <= ?
+      ORDER BY executed_at ASC
+    `, [...tickers.map(t => t.toUpperCase()), startTime, endTime]);
+    
+    // Define bucket data structure
+    interface SentimentBucket {
+      scores: number[];
+      confidences: number[];
+      count: number;
+    }
+    
+    // Organize sentiment data by ticker and bucket
+    const sentimentByTickerBucket = new Map<string, Map<number, SentimentBucket>>();
+    
+    for (const row of sentimentRows) {
+      const extractedTickers = JSON.parse(row.extracted_tickers || '[]');
+      const bucketStart = getBucketStart(row.processing_timestamp);
+      
+      for (const ticker of extractedTickers) {
+        if (!tickers.includes(ticker.toUpperCase())) continue;
+        
+        if (!sentimentByTickerBucket.has(ticker)) {
+          sentimentByTickerBucket.set(ticker, new Map());
+        }
+        
+        const bucketMap = sentimentByTickerBucket.get(ticker)!;
+        if (!bucketMap.has(bucketStart)) {
+          bucketMap.set(bucketStart, { scores: [], confidences: [], count: 0 });
+        }
+        
+        const bucket = bucketMap.get(bucketStart)!;
+        bucket.scores.push(row.sentiment_score);
+        bucket.confidences.push(row.confidence_level);
+        bucket.count++;
+      }
+    }
+    
+    // Organize price data by ticker and bucket
+    const priceByTickerBucket = new Map<string, Map<number, number[]>>();
+    
+    for (const row of priceRows) {
+      const bucketStart = getBucketStart(row.timestamp);
+      
+      if (!priceByTickerBucket.has(row.ticker)) {
+        priceByTickerBucket.set(row.ticker, new Map());
+      }
+      
+      const bucketMap = priceByTickerBucket.get(row.ticker)!;
+      if (!bucketMap.has(bucketStart)) {
+        bucketMap.set(bucketStart, []);
+      }
+      
+      bucketMap.get(bucketStart)!.push(row.price);
+    }
+    
+    // Organize trade signals by ticker and timestamp
+    const tradesByTicker = new Map<string, Array<{ timestamp: number; action: string; reasoning: string }>>();
+    
+    for (const row of tradeRows) {
+      if (!tradesByTicker.has(row.ticker)) {
+        tradesByTicker.set(row.ticker, []);
+      }
+      tradesByTicker.get(row.ticker)!.push({
+        timestamp: row.executed_at,
+        action: row.action.toUpperCase(),
+        reasoning: row.reasoning
+      });
+    }
+    
+    // Get BTC price history if needed
+    let btcPriceHistory: Array<{ timestamp: number; priceUSD: number }> = [];
+    if (baseCurrency === 'BTC') {
+      const btcRows = await this.db.all(`
+        SELECT timestamp, price
+        FROM market_snapshots
+        WHERE ticker = 'BTC' 
+          AND timestamp >= ? AND timestamp <= ?
+        ORDER BY timestamp ASC
+      `, [startTime, endTime]);
+      
+      btcPriceHistory = btcRows.map(row => ({
+        timestamp: row.timestamp,
+        priceUSD: row.price
+      }));
+    }
+    
+    // Helper to find closest BTC price
+    const findClosestBTCPrice = (timestamp: number): number | null => {
+      if (btcPriceHistory.length === 0) return null;
+      
+      let closest = btcPriceHistory[0];
+      let minDiff = Math.abs(timestamp - closest.timestamp);
+      
+      for (const entry of btcPriceHistory) {
+        const diff = Math.abs(timestamp - entry.timestamp);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = entry;
+        }
+      }
+      
+      // Only return if within reasonable time window (1 day)
+      if (minDiff < 24 * 60 * 60 * 1000) {
+        return closest.priceUSD;
+      }
+      return null;
+    };
+    
+    // Build data points for each ticker
+    const result: any = {
+      tickers: {},
+      btcPriceHistory,
+      timeRange: {
+        start: startTime,
+        end: endTime,
+        interval
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    for (const ticker of tickers) {
+      const tickerUpper = ticker.toUpperCase();
+      const sentimentBuckets = sentimentByTickerBucket.get(tickerUpper) || new Map();
+      const priceBuckets = priceByTickerBucket.get(tickerUpper) || new Map();
+      const trades = tradesByTicker.get(tickerUpper) || [];
+      
+      // Get all unique bucket timestamps
+      const allBuckets = new Set<number>();
+      sentimentBuckets.forEach((_, bucket) => allBuckets.add(bucket));
+      priceBuckets.forEach((_, bucket) => allBuckets.add(bucket));
+      
+      const sortedBuckets = Array.from(allBuckets).sort((a, b) => a - b);
+      
+      const dataPoints: any[] = [];
+      let totalSentiment = 0;
+      let totalMentions = 0;
+      let sentimentCount = 0;
+      const prices: number[] = [];
+      
+      for (const bucketStart of sortedBuckets) {
+        const sentimentData = sentimentBuckets.get(bucketStart);
+        const priceData = priceBuckets.get(bucketStart);
+        
+        // Calculate averages
+        let avgSentiment = 0;
+        let avgConfidence = 0;
+        let mentionCount = 0;
+        
+        if (sentimentData) {
+          avgSentiment = sentimentData.scores.reduce((a: number, b: number) => a + b, 0) / sentimentData.scores.length;
+          avgConfidence = sentimentData.confidences.reduce((a: number, b: number) => a + b, 0) / sentimentData.confidences.length;
+          mentionCount = sentimentData.count;
+          
+          // Clamp sentiment to [-1, 1]
+          avgSentiment = Math.max(-1, Math.min(1, avgSentiment));
+          
+          totalSentiment += avgSentiment;
+          totalMentions += mentionCount;
+          sentimentCount++;
+        }
+        
+        let priceUSD: number | null = null;
+        if (priceData && priceData.length > 0) {
+          // Use average price for the bucket
+          priceUSD = priceData.reduce((a: number, b: number) => a + b, 0) / priceData.length;
+          prices.push(priceUSD);
+        }
+        
+        // Convert to BTC if needed
+        let priceBTC: number | null = null;
+        if (baseCurrency === 'BTC' && priceUSD !== null) {
+          if (tickerUpper === 'BTC') {
+            priceBTC = 1.0;
+          } else {
+            const btcPrice = findClosestBTCPrice(bucketStart);
+            if (btcPrice) {
+              priceBTC = priceUSD / btcPrice;
+            }
+          }
+        }
+        
+        // Find trade signal for this bucket
+        const tradeSignal = trades.find(t => {
+          const tradeBucket = getBucketStart(t.timestamp);
+          return tradeBucket === bucketStart;
+        });
+        
+        // Only include data points where we have sentiment or price data
+        if (sentimentData || priceData) {
+          dataPoints.push({
+            timestamp: bucketStart,
+            sentimentScore: sentimentData ? avgSentiment : null,
+            confidence: sentimentData ? avgConfidence : null,
+            mentionCount: mentionCount,
+            priceUSD,
+            priceBTC,
+            tradeSignal: tradeSignal ? {
+              action: tradeSignal.action as 'BUY' | 'SELL',
+              reasoning: tradeSignal.reasoning
+            } : undefined
+          });
+        }
+      }
+      
+      // Calculate summary statistics
+      const avgSentiment = sentimentCount > 0 ? totalSentiment / sentimentCount : 0;
+      
+      let priceChangePercent = 0;
+      if (prices.length >= 2) {
+        const firstPrice = prices[0];
+        const lastPrice = prices[prices.length - 1];
+        priceChangePercent = ((lastPrice - firstPrice) / firstPrice) * 100;
+      }
+      
+      // Calculate Pearson correlation
+      let correlation: number | null = null;
+      const validPairs: Array<{ sentiment: number; priceReturn: number }> = [];
+      
+      for (let i = 1; i < dataPoints.length; i++) {
+        const current = dataPoints[i];
+        const previous = dataPoints[i - 1];
+        
+        if (current.sentimentScore !== null && 
+            current.priceUSD !== null && 
+            previous.priceUSD !== null && 
+            previous.priceUSD > 0) {
+          
+          const priceToUse = baseCurrency === 'BTC' && current.priceBTC !== null && previous.priceBTC !== null
+            ? current.priceBTC / previous.priceBTC
+            : current.priceUSD / previous.priceUSD;
+          
+          const priceReturn = Math.log(priceToUse);
+          validPairs.push({ sentiment: current.sentimentScore, priceReturn });
+        }
+      }
+      
+      if (validPairs.length >= 3) {
+        correlation = this.calculateCorrelation(
+          validPairs.map(p => p.sentiment),
+          validPairs.map(p => p.priceReturn)
+        );
+      }
+      
+      result.tickers[tickerUpper] = {
+        dataPoints,
+        summary: {
+          avgSentiment,
+          priceChangePercent,
+          totalMentions,
+          sentimentPriceCorrelation: correlation
+        }
+      };
+    }
+    
+    return result;
   }
 
   /**

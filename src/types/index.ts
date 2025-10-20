@@ -320,3 +320,48 @@ export class DatabaseError extends CPTOError {
     this.name = 'DatabaseError';
   }
 }
+
+// Sentiment vs Price Analysis types
+export interface SentimentPriceDataPoint {
+  timestamp: number;
+  sentimentScore: number;
+  confidence: number;
+  mentionCount: number;
+  priceUSD: number | null;
+  priceBTC: number | null;
+  tradeSignal?: {
+    action: 'BUY' | 'SELL';
+    reasoning: string;
+  };
+}
+
+export interface TickerSentimentPriceSummary {
+  avgSentiment: number;
+  priceChangePercent: number;
+  totalMentions: number;
+  sentimentPriceCorrelation: number | null;
+}
+
+export interface TickerSentimentPriceData {
+  dataPoints: SentimentPriceDataPoint[];
+  summary: TickerSentimentPriceSummary;
+}
+
+export interface SentimentVsPriceResponse {
+  tickers: Record<string, TickerSentimentPriceData>;
+  btcPriceHistory: Array<{ timestamp: number; priceUSD: number }>;
+  timeRange: {
+    start: number;
+    end: number;
+    interval: 'hourly' | 'daily';
+  };
+  timestamp: string;
+}
+
+export interface SentimentPriceCorrelationOptions {
+  tickers: string[];
+  startTime: number;
+  endTime: number;
+  interval: 'hourly' | 'daily';
+  baseCurrency: 'USD' | 'BTC';
+}

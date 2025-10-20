@@ -40,6 +40,12 @@
             display: flex;
             justify-content: center;
             margin-bottom: 30px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav a {
+            text-decoration: none;
         }
 
         .nav button {
@@ -261,8 +267,15 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 CPTO Analytics</h1>
-            <p>Backtesting & Strategy Optimization</p>
+            <h1>🔬 CPTO Backtesting & Analytics</h1>
+        </div>
+        
+        <div class="nav">
+            <a href="/"><button>🏠 Dashboard</button></a>
+            <a href="/tickers"><button>📊 Tickers</button></a>
+            <a href="/backtesting.html"><button class="active">📈 Backtesting</button></a>
+            <a href="/sentiment-analysis"><button>📉 Sentiment vs Price</button></a>
+        </div>
         </div>
 
         <div class="nav">

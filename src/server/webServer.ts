@@ -28,6 +28,8 @@ export class WebServer {
   private io: SocketIOServer;
   private port: number;
   private logWatchers: Map<string, any> = new Map();
+  private sentimentPriceCache: Map<string, { data: any; timestamp: number }> = new Map();
+  private sentimentPriceCacheTTL: number = 60000; // 60 seconds
 
   constructor() {
     this.port = config.app.port + 1000; // Use port 4000 if main app is on 3000
@@ -1014,6 +1016,121 @@ export class WebServer {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // SENTIMENT VS PRICE ANALYSIS ENDPOINTS
+    
+    // Serve the sentiment analysis page
+    this.app.get('/sentiment-analysis', (_req, res) => {
+      res.sendFile(path.join(__dirname, '../../public/sentiment-analysis.html'));
+    });
+    
+    // Get sentiment vs price correlation data
+    this.app.get('/api/analytics/sentiment-vs-price', async (req, res) => {
+      try {
+        // Parse and validate query parameters
+        const tickersParam = req.query.tickers as string;
+        if (!tickersParam) {
+          return res.status(400).json({ error: 'tickers parameter is required' });
+        }
+        
+        const tickers = tickersParam.split(',').map(t => t.trim().toUpperCase());
+        
+        // Enforce ticker limits
+        if (tickers.length === 0) {
+          return res.status(400).json({ error: 'At least one ticker is required' });
+        }
+        
+        if (tickers.length > 10) {
+          return res.status(400).json({ error: 'Maximum 10 tickers allowed' });
+        }
+        
+        // Parse time range
+        let startTime: number;
+        let endTime: number;
+        
+        if (req.query.startTime && req.query.endTime) {
+          startTime = parseInt(req.query.startTime as string);
+          endTime = parseInt(req.query.endTime as string);
+        } else {
+          // Default to last 7 days
+          endTime = Date.now();
+          startTime = endTime - (7 * 24 * 60 * 60 * 1000);
+        }
+        
+        // Validate time range
+        if (isNaN(startTime) || isNaN(endTime)) {
+          return res.status(400).json({ error: 'Invalid time range' });
+        }
+        
+        if (startTime >= endTime) {
+          return res.status(400).json({ error: 'startTime must be before endTime' });
+        }
+        
+        // Parse interval
+        let interval: 'hourly' | 'daily' = 'hourly';
+        if (req.query.interval) {
+          const requestedInterval = req.query.interval as string;
+          if (requestedInterval !== 'hourly' && requestedInterval !== 'daily') {
+            return res.status(400).json({ error: 'interval must be "hourly" or "daily"' });
+          }
+          interval = requestedInterval;
+        } else {
+          // Auto-derive interval based on time range
+          const daysDiff = (endTime - startTime) / (24 * 60 * 60 * 1000);
+          interval = daysDiff >= 14 ? 'daily' : 'hourly';
+        }
+        
+        // Parse base currency
+        let baseCurrency: 'USD' | 'BTC' = 'USD';
+        if (req.query.baseCurrency) {
+          const requestedCurrency = (req.query.baseCurrency as string).toUpperCase();
+          if (requestedCurrency !== 'USD' && requestedCurrency !== 'BTC') {
+            return res.status(400).json({ error: 'baseCurrency must be "USD" or "BTC"' });
+          }
+          baseCurrency = requestedCurrency as 'USD' | 'BTC';
+        }
+        
+        // Check cache
+        const cacheKey = `${tickers.sort().join(',')}_${startTime}_${endTime}_${interval}_${baseCurrency}`;
+        const cached = this.sentimentPriceCache.get(cacheKey);
+        
+        if (cached && Date.now() - cached.timestamp < this.sentimentPriceCacheTTL) {
+          console.log(`📦 Returning cached sentiment/price data for ${tickers.join(', ')}`);
+          return res.json(cached.data);
+        }
+        
+        console.log(`📊 Fetching sentiment/price data for ${tickers.join(', ')} (${interval}, ${baseCurrency})`);
+        
+        // Fetch data from storage service
+        const data = await dataStorageService.getSentimentPriceCorrelation({
+          tickers,
+          startTime,
+          endTime,
+          interval,
+          baseCurrency
+        });
+        
+        // Cache the result
+        this.sentimentPriceCache.set(cacheKey, {
+          data,
+          timestamp: Date.now()
+        });
+        
+        // Clean old cache entries (simple LRU)
+        if (this.sentimentPriceCache.size > 100) {
+          const entries = Array.from(this.sentimentPriceCache.entries());
+          entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+          entries.slice(0, 20).forEach(([key]) => this.sentimentPriceCache.delete(key));
+        }
+        
+        return res.json(data);
+        
+      } catch (error) {
+        console.error('Sentiment vs price analysis error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
       }
     });
     

@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPTO - Sentiment vs Price Analysis</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            border-bottom: 1px solid #eee;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: #3498db;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-links a:hover {
+            background-color: #ecf0f1;
+        }
+
+        .controls-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #2c3e50;
+        }
+
+        .ticker-checkboxes {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .ticker-checkbox {
+            display: flex;
+            align-items: center;
+        }
+
+        .ticker-checkbox input {
+            margin-right: 5px;
+        }
+
+        .time-range-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .time-range-btn {
+            padding: 8px 16px;
+            border: 1px solid #3498db;
+            background: white;
+            color: #3498db;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .time-range-btn:hover {
+            background: #ecf0f1;
+        }
+
+        .time-range-btn.active {
+            background: #3498db;
+            color: white;
+        }
+
+        .custom-dates {
+            display: none;
+            margin-top: 10px;
+            gap: 10px;
+        }
+
+        .custom-dates.active {
+            display: flex;
+        }
+
+        .custom-dates input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .currency-toggle {
+            display: flex;
+            gap: 10px;
+        }
+
+        .currency-btn {
+            padding: 8px 20px;
+            border: 1px solid #3498db;
+            background: white;
+            color: #3498db;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .currency-btn.active {
+            background: #3498db;
+            color: white;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #2980b9;
+        }
+
+        .btn-primary:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #7f8c8d;
+        }
+
+        .summary-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .summary-card {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+
+        .summary-card h3 {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 10px;
+        }
+
+        .summary-stat {
+            font-size: 12px;
+            margin: 5px 0;
+        }
+
+        .summary-stat strong {
+            color: #2c3e50;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 600px;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #3498db;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error, .warning {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .warning {
+            background: #f39c12;
+            color: white;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #resetZoomBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .ticker-checkboxes {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            }
+            
+            .chart-container {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📈 Sentiment vs Price Analysis</h1>
+            <div class="nav-links">
+                <a href="/">🏠 Dashboard</a>
+                <a href="/tickers">📊 Ticker Management</a>
+                <a href="/backtesting.html">📈 Backtesting</a>
+                <a href="/sentiment-analysis">📉 Sentiment vs Price</a>
+            </div>
+        </div>
+
+        <div id="errorBanner" class="error hidden"></div>
+        <div id="warningBanner" class="warning hidden"></div>
+
+        <div class="controls-panel">
+            <div class="control-group">
+                <label>Select Tickers (Max 10):</label>
+                <div>
+                    <button class="btn btn-secondary" onclick="selectAllTickers()">Select All</button>
+                    <button class="btn btn-secondary" onclick="clearAllTickers()">Clear All</button>
+                </div>
+                <div id="tickerCheckboxes" class="ticker-checkboxes">
+                    <div class="loading">Loading tickers...</div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Time Range:</label>
+                <div class="time-range-buttons">
+                    <button class="time-range-btn active" data-range="24h">24 Hours</button>
+                    <button class="time-range-btn" data-range="7d">7 Days</button>
+                    <button class="time-range-btn" data-range="30d">30 Days</button>
+                    <button class="time-range-btn" data-range="custom">Custom</button>
+                </div>
+                <div class="custom-dates" id="customDates">
+                    <input type="datetime-local" id="startDate" />
+                    <input type="datetime-local" id="endDate" />
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Base Currency:</label>
+                <div class="currency-toggle">
+                    <button class="currency-btn active" data-currency="USD">USD</button>
+                    <button class="currency-btn" data-currency="BTC">BTC</button>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="applyBtn" onclick="loadChartData()">Apply</button>
+                <button class="btn btn-secondary" onclick="refreshData()">🔄 Refresh</button>
+                <button class="btn btn-secondary" onclick="exportChart()">📥 Export PNG</button>
+            </div>
+        </div>
+
+        <div id="summaryPanel" class="summary-panel hidden"></div>
+
+        <div class="chart-container">
+            <button class="btn btn-secondary hidden" id="resetZoomBtn" onclick="resetZoom()">Reset Zoom</button>
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                Loading chart data...
+            </div>
+            <canvas id="sentimentPriceChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Chart.js and plugins -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+
+    <script>
+        // State management
+        let state = {
+            selectedTickers: [],
+            timeRange: { preset: '24h' },
+            baseCurrency: 'USD',
+            availableTickers: [],
+            chart: null,
+            abortController: null
+        };
+
+        // Color palette for tickers
+        const COLOR_PALETTE = [
+            '#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
+            '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+            '#8e44ad', '#27ae60', '#d35400', '#2c3e50', '#f1c40f'
+        ];
+
+        function getTickerColor(ticker) {
+            const index = state.availableTickers.indexOf(ticker) % COLOR_PALETTE.length;
+            return COLOR_PALETTE[index];
+        }
+
+        // Load tickers on page load
+        async function loadTickers() {
+            try {
+                const response = await fetch('/api/analytics/watchlist');
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load tickers');
+                }
+
+                state.availableTickers = data.watchlist
+                    .map(item => item.ticker)
+                    .sort();
+
+                renderTickerCheckboxes();
+                
+                // Restore saved state
+                restoreState();
+                
+            } catch (error) {
+                showError(`Failed to load tickers: ${error.message}`);
+            }
+        }
+
+        function renderTickerCheckboxes() {
+            const container = document.getElementById('tickerCheckboxes');
+            container.innerHTML = state.availableTickers.map(ticker => `
+                <div class="ticker-checkbox">
+                    <input type="checkbox" id="ticker-${ticker}" value="${ticker}" 
+                           onchange="handleTickerChange()">
+                    <label for="ticker-${ticker}">${ticker}</label>
+                </div>
+            `).join('');
+        }
+
+        function handleTickerChange() {
+            const checkboxes = document.querySelectorAll('.ticker-checkbox input:checked');
+            state.selectedTickers = Array.from(checkboxes).map(cb => cb.value);
+            
+            const applyBtn = document.getElementById('applyBtn');
+            const warningBanner = document.getElementById('warningBanner');
+            
+            if (state.selectedTickers.length === 0) {
+                applyBtn.disabled = true;
+                showWarning('Please select at least one ticker');
+            } else if (state.selectedTickers.length > 10) {
+                applyBtn.disabled = true;
+                showWarning('Maximum 10 tickers allowed. Please deselect some.');
+            } else {
+                applyBtn.disabled = false;
+                hideWarning();
+            }
+            
+            saveState();
+        }
+
+        function selectAllTickers() {
+            const checkboxes = document.querySelectorAll('.ticker-checkbox input');
+            const limit = Math.min(10, checkboxes.length);
+            checkboxes.forEach((cb, i) => {
+                cb.checked = i < limit;
+            });
+            handleTickerChange();
+        }
+
+        function clearAllTickers() {
+            document.querySelectorAll('.ticker-checkbox input').forEach(cb => {
+                cb.checked = false;
+            });
+            handleTickerChange();
+        }
+
+        // Time range controls
+        document.querySelectorAll('.time-range-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                const range = btn.dataset.range;
+                const customDates = document.getElementById('customDates');
+                
+                if (range === 'custom') {
+                    customDates.classList.add('active');
+                    state.timeRange = { preset: 'custom' };
+                } else {
+                    customDates.classList.remove('active');
+                    state.timeRange = { preset: range };
+                }
+                
+                saveState();
+            });
+        });
+
+        // Currency toggle
+        document.querySelectorAll('.currency-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.baseCurrency = btn.dataset.currency;
+                saveState();
+                
+                // Update chart if it exists
+                if (state.chart) {
+                    updateChartCurrency();
+                }
+            });
+        });
+
+        function updateChartCurrency() {
+            if (!state.chart) return;
+            
+            const yAxisLabel = state.baseCurrency === 'USD' ? 'Price (USD)' : 'Price (BTC)';
+            state.chart.options.scales.yPrice.title.text = yAxisLabel;
+            state.chart.update('none');
+        }
+
+        // Load chart data
+        let loadDebounceTimer = null;
+        async function loadChartData() {
+            // Clear any existing debounce
+            if (loadDebounceTimer) {
+                clearTimeout(loadDebounceTimer);
+            }
+            
+            loadDebounceTimer = setTimeout(async () => {
+                await _loadChartDataImpl();
+            }, 300);
+        }
+
+        async function _loadChartDataImpl() {
+            if (state.selectedTickers.length === 0) {
+                showWarning('Please select at least one ticker');
+                return;
+            }
+
+            // Cancel any in-flight requests
+            if (state.abortController) {
+                state.abortController.abort();
+            }
+            state.abortController = new AbortController();
+
+            hideError();
+            hideWarning();
+            showLoading();
+
+            try {
+                // Build query parameters
+                const params = new URLSearchParams();
+                params.append('tickers', state.selectedTickers.join(','));
+                params.append('baseCurrency', state.baseCurrency);
+
+                // Calculate time range
+                const now = Date.now();
+                let startTime, endTime;
+
+                if (state.timeRange.preset === 'custom') {
+                    const startInput = document.getElementById('startDate').value;
+                    const endInput = document.getElementById('endDate').value;
+                    
+                    if (!startInput || !endInput) {
+                        showError('Please select custom date range');
+                        hideLoading();
+                        return;
+                    }
+                    
+                    startTime = new Date(startInput).getTime();
+                    endTime = new Date(endInput).getTime();
+                } else {
+                    endTime = now;
+                    switch (state.timeRange.preset) {
+                        case '24h':
+                            startTime = now - (24 * 60 * 60 * 1000);
+                            break;
+                        case '7d':
+                            startTime = now - (7 * 24 * 60 * 60 * 1000);
+                            break;
+                        case '30d':
+                            startTime = now - (30 * 24 * 60 * 60 * 1000);
+                            break;
+                    }
+                }
+
+                params.append('startTime', startTime.toString());
+                params.append('endTime', endTime.toString());
+
+                const response = await fetch(`/api/analytics/sentiment-vs-price?${params}`, {
+                    signal: state.abortController.signal
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load data');
+                }
+
+                renderChart(data);
+                renderSummary(data);
+                hideLoading();
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Request cancelled');
+                    return;
+                }
+                showError(`Failed to load data: ${error.message}`);
+                hideLoading();
+            }
+        }
+
+        function renderChart(data) {
+            const ctx = document.getElementById('sentimentPriceChart');
+            
+            // Destroy existing chart
+            if (state.chart) {
+                state.chart.destroy();
+            }
+
+            const datasets = [];
+            
+            // Create datasets for each ticker
+            for (const [ticker, tickerData] of Object.entries(data.tickers)) {
+                const color = getTickerColor(ticker);
+                const dataPoints = tickerData.dataPoints;
+                
+                // Price line dataset
+                const priceKey = state.baseCurrency === 'BTC' ? 'priceBTC' : 'priceUSD';
+                datasets.push({
+                    label: `${ticker} Price`,
+                    data: dataPoints.map(p => ({
+                        x: p.timestamp,
+                        y: p[priceKey]
+                    })).filter(p => p.y !== null),
+                    borderColor: color,
+                    backgroundColor: color,
+                    borderWidth: 2,
+                    yAxisID: 'yPrice',
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                });
+
+                // Sentiment line dataset
+                datasets.push({
+                    label: `${ticker} Sentiment`,
+                    data: dataPoints.map(p => ({
+                        x: p.timestamp,
+                        y: p.sentimentScore,
+                        confidence: p.confidence
+                    })).filter(p => p.y !== null),
+                    borderColor: color,
+                    backgroundColor: color + '40',
+                    borderWidth: function(context) {
+                        const point = context.raw;
+                        return point && point.confidence ? 1 + (point.confidence * 3) : 2;
+                    },
+                    borderDash: [6, 4],
+                    yAxisID: 'ySentiment',
+                    pointRadius: 0,
+                    fill: false,
+                    tension: 0.1
+                });
+
+                // Mentions scatter dataset
+                datasets.push({
+                    label: `${ticker} Mentions`,
+                    data: dataPoints.map(p => ({
+                        x: p.timestamp,
+                        y: p.sentimentScore,
+                        r: p.mentionCount > 0 ? Math.min(1 + Math.sqrt(p.mentionCount) * 2, 8) : 0
+                    })).filter(p => p.r > 0),
+                    backgroundColor: color + '60',
+                    borderColor: color,
+                    yAxisID: 'ySentiment',
+                    pointStyle: 'circle',
+                    type: 'scatter'
+                });
+
+                // Trade signals
+                const buySignals = dataPoints.filter(p => p.tradeSignal && p.tradeSignal.action === 'BUY');
+                const sellSignals = dataPoints.filter(p => p.tradeSignal && p.tradeSignal.action === 'SELL');
+
+                if (buySignals.length > 0) {
+                    datasets.push({
+                        label: `${ticker} BUY`,
+                        data: buySignals.map(p => ({
+                            x: p.timestamp,
+                            y: p[priceKey],
+                            reasoning: p.tradeSignal.reasoning
+                        })),
+                        backgroundColor: '#2ecc71',
+                        borderColor: '#27ae60',
+                        pointStyle: 'triangle',
+                        pointRadius: 8,
+                        yAxisID: 'yPrice',
+                        type: 'scatter'
+                    });
+                }
+
+                if (sellSignals.length > 0) {
+                    datasets.push({
+                        label: `${ticker} SELL`,
+                        data: sellSignals.map(p => ({
+                            x: p.timestamp,
+                            y: p[priceKey],
+                            reasoning: p.tradeSignal.reasoning
+                        })),
+                        backgroundColor: '#e74c3c',
+                        borderColor: '#c0392b',
+                        pointStyle: 'rectRot',
+                        pointRadius: 8,
+                        yAxisID: 'yPrice',
+                        type: 'scatter'
+                    });
+                }
+            }
+
+            state.chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                const meta = ci.getDatasetMeta(index);
+                                meta.hidden = !meta.hidden;
+                                ci.update();
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return new Date(context[0].parsed.x).toLocaleString();
+                                },
+                                label: function(context) {
+                                    const dataset = context.dataset;
+                                    const dataPoint = context.raw;
+                                    
+                                    if (dataset.label.includes('Price')) {
+                                        return `${dataset.label}: ${context.parsed.y.toFixed(6)}`;
+                                    } else if (dataset.label.includes('Sentiment')) {
+                                        return `${dataset.label}: ${context.parsed.y.toFixed(3)} (conf: ${(dataPoint.confidence || 0).toFixed(2)})`;
+                                    } else if (dataset.label.includes('Mentions')) {
+                                        return `Mentions: ${Math.round(Math.pow((dataPoint.r - 1) / 2, 2))}`;
+                                    } else if (dataset.label.includes('BUY') || dataset.label.includes('SELL')) {
+                                        return [`${dataset.label}: ${context.parsed.y.toFixed(6)}`, `Reason: ${dataPoint.reasoning || 'N/A'}`];
+                                    }
+                                    return '';
+                                }
+                            }
+                        },
+                        zoom: {
+                            pan: {
+                                enabled: true,
+                                mode: 'x'
+                            },
+                            zoom: {
+                                wheel: {
+                                    enabled: true
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                                onZoomComplete: () => {
+                                    document.getElementById('resetZoomBtn').classList.remove('hidden');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: data.timeRange.interval === 'daily' ? 'day' : 'hour'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        ySentiment: {
+                            type: 'linear',
+                            position: 'left',
+                            min: -1,
+                            max: 1,
+                            title: {
+                                display: true,
+                                text: 'Sentiment'
+                            },
+                            grid: {
+                                drawOnChartArea: true
+                            }
+                        },
+                        yPrice: {
+                            type: 'linear',
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: state.baseCurrency === 'USD' ? 'Price (USD)' : 'Price (BTC)'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderSummary(data) {
+            const summaryPanel = document.getElementById('summaryPanel');
+            summaryPanel.classList.remove('hidden');
+            
+            summaryPanel.innerHTML = Object.entries(data.tickers).map(([ticker, tickerData]) => {
+                const summary = tickerData.summary;
+                const color = getTickerColor(ticker);
+                
+                return `
+                    <div class="summary-card" style="border-left-color: ${color}">
+                        <h3>${ticker}</h3>
+                        <div class="summary-stat"><strong>Avg Sentiment:</strong> ${summary.avgSentiment.toFixed(3)}</div>
+                        <div class="summary-stat"><strong>Price Change:</strong> ${summary.priceChangePercent.toFixed(2)}%</div>
+                        <div class="summary-stat"><strong>Total Mentions:</strong> ${summary.totalMentions}</div>
+                        <div class="summary-stat"><strong>Correlation:</strong> ${summary.sentimentPriceCorrelation !== null ? summary.sentimentPriceCorrelation.toFixed(3) : 'N/A'}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function resetZoom() {
+            if (state.chart) {
+                state.chart.resetZoom();
+                document.getElementById('resetZoomBtn').classList.add('hidden');
+            }
+        }
+
+        function refreshData() {
+            loadChartData();
+        }
+
+        function exportChart() {
+            if (!state.chart) {
+                showWarning('No chart to export');
+                return;
+            }
+            
+            const url = state.chart.toBase64Image();
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sentiment-vs-price-${Date.now()}.png`;
+            a.click();
+        }
+
+        // UI helpers
+        function showLoading() {
+            document.getElementById('loading').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        function showError(message) {
+            const banner = document.getElementById('errorBanner');
+            banner.textContent = message;
+            banner.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('errorBanner').classList.add('hidden');
+        }
+
+        function showWarning(message) {
+            const banner = document.getElementById('warningBanner');
+            banner.textContent = message;
+            banner.classList.remove('hidden');
+        }
+
+        function hideWarning() {
+            document.getElementById('warningBanner').classList.add('hidden');
+        }
+
+        // State persistence
+        function saveState() {
+            localStorage.setItem('sentimentAnalysisState', JSON.stringify({
+                selectedTickers: state.selectedTickers,
+                timeRange: state.timeRange,
+                baseCurrency: state.baseCurrency
+            }));
+        }
+
+        function restoreState() {
+            try {
+                const saved = localStorage.getItem('sentimentAnalysisState');
+                if (saved) {
+                    const restored = JSON.parse(saved);
+                    
+                    // Restore selected tickers
+                    if (restored.selectedTickers) {
+                        restored.selectedTickers.forEach(ticker => {
+                            const checkbox = document.getElementById(`ticker-${ticker}`);
+                            if (checkbox) checkbox.checked = true;
+                        });
+                        handleTickerChange();
+                    }
+                    
+                    // Restore time range
+                    if (restored.timeRange) {
+                        state.timeRange = restored.timeRange;
+                        const btn = document.querySelector(`.time-range-btn[data-range="${restored.timeRange.preset}"]`);
+                        if (btn) {
+                            document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
+                            btn.classList.add('active');
+                            if (restored.timeRange.preset === 'custom') {
+                                document.getElementById('customDates').classList.add('active');
+                            }
+                        }
+                    }
+                    
+                    // Restore currency
+                    if (restored.baseCurrency) {
+                        state.baseCurrency = restored.baseCurrency;
+                        const btn = document.querySelector(`.currency-btn[data-currency="${restored.baseCurrency}"]`);
+                        if (btn) {
+                            document.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
+                            btn.classList.add('active');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to restore state:', error);
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTickers();
+        });
+    </script>
+</body>
+</html>
