@@ -78,12 +78,13 @@ export class AIService {
     try {
       if (!ticker) return null;
       
-      const recentAnalysis = await dataStorageService.getRecentAnalysisForTicker(ticker, 2); // Last 2 hours
+      const recentAnalysis = await dataStorageService.getRecentAnalysisForTicker(ticker, 4); // Last 4 hours (expanded for better reuse)
       
       // Look for very similar content (same author, similar length, recent)
       for (const analysis of recentAnalysis) {
         const similarity = this.calculateTextSimilarity(text, analysis.content);
-        if (similarity > 0.85 && (Date.now() - analysis.processing_timestamp) < 3600000) { // 1 hour
+        // Expanded: 0.90 threshold (from 0.85) for higher quality matches, 4 hour window (from 1h)
+        if (similarity > 0.90 && (Date.now() - analysis.processing_timestamp) < 14400000) { // 4 hours
           // Increment reuse count for cost tracking
           await dataStorageService.incrementReuseCount(analysis.id);
           

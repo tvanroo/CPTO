@@ -1,6 +1,6 @@
 import snoowrap from 'snoowrap';
 import { config } from '../config';
-import { RedditPost, RedditComment, RedditAPIError } from '../types';
+import { RedditPost, RedditComment, RedditAPIError, SubredditValidationResult } from '../types';
 import { EventEmitter } from 'events';
 
 export class RedditClient extends EventEmitter {
@@ -8,6 +8,14 @@ export class RedditClient extends EventEmitter {
   private streamingSubreddits: Set<string> = new Set();
   private isStreaming: boolean = false;
   private streamIntervals: Map<string, NodeJS.Timeout> = new Map();
+  
+  // Ticker context inheritance tracking
+  public tickerContextMap: Map<string, string[]> = new Map(); // commentId -> tickers
+  private readonly CONTEXT_MAP_MAX_SIZE = 10000; // Limit memory usage
+  
+  // Subreddit validation cache to avoid rate limits
+  private validationCache: Map<string, { result: SubredditValidationResult; timestamp: number }> = new Map();
+  private readonly VALIDATION_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
     super();
@@ -54,21 +62,40 @@ export class RedditClient extends EventEmitter {
 
   /**
    * Start streaming posts and comments from specified subreddits
+   * If no subreddits provided, loads from database
    */
-  public async startStreaming(subreddits: string[] = config.trading.subreddits): Promise<void> {
+  public async startStreaming(subreddits?: string[]): Promise<void> {
     if (this.isStreaming) {
       console.warn('Reddit streaming is already active');
       return;
     }
 
-    this.isStreaming = true;
-    console.log(`Starting Reddit stream for subreddits: ${subreddits.join(', ')}`);
-
-    for (const subreddit of subreddits) {
-      await this.streamSubreddit(subreddit);
+    // If no subreddits provided, load from database
+    let subredditsToStream = subreddits;
+    if (!subredditsToStream) {
+      try {
+        const { dataStorageService } = await import('../services/dataStorageService');
+        subredditsToStream = await dataStorageService.getActiveSubreddits();
+        console.log(`📊 Loaded ${subredditsToStream.length} active subreddits from database`);
+      } catch (error) {
+        console.warn('Failed to load subreddits from database, falling back to config:', error);
+        subredditsToStream = config.trading.subreddits;
+      }
     }
 
-    this.emit('streamStarted', { subreddits });
+    if (!subredditsToStream || subredditsToStream.length === 0) {
+      console.warn('⚠️  No subreddits to monitor');
+      return;
+    }
+
+    this.isStreaming = true;
+    console.log(`🚀 Starting Reddit stream for ${subredditsToStream.length} subreddits: ${subredditsToStream.join(', ')}`);
+
+    for (const subreddit of subredditsToStream) {
+      await this.addStreamingSubreddit(subreddit);
+    }
+
+    this.emit('streamStarted', { subreddits: subredditsToStream });
   }
 
   /**
@@ -344,6 +371,225 @@ export class RedditClient extends EventEmitter {
       maxRetryAttempts: 3,
       note: 'snoowrap handles rate limiting internally'
     };
+  }
+  
+  /**
+   * Get a single comment by ID (for parent comment fetching)
+   */
+  public async getCommentById(commentId: string): Promise<RedditComment | null> {
+    try {
+      // Reddit API expects full thing_id format (t1_xxxxx for comments)
+      const fullId = commentId.startsWith('t1_') ? commentId : `t1_${commentId}`;
+      const comment = await this.reddit.getComment(fullId.replace('t1_', ''));
+      
+      if (!comment || !comment.body || comment.body === '[deleted]') {
+        return null;
+      }
+      
+      return this.convertToRedditComment(comment);
+    } catch (error) {
+      console.warn(`Failed to fetch comment ${commentId}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Store ticker context for a comment (for inheritance)
+   */
+  public storeTickerContext(commentId: string, tickers: string[]): void {
+    if (tickers.length > 0) {
+      this.tickerContextMap.set(commentId, tickers);
+      
+      // Clean up old entries if map gets too large (simple FIFO)
+      if (this.tickerContextMap.size > this.CONTEXT_MAP_MAX_SIZE) {
+        const firstKey = this.tickerContextMap.keys().next().value;
+        if (firstKey) {
+          this.tickerContextMap.delete(firstKey);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Get inherited ticker context from parent
+   */
+  public getInheritedTickers(parentId: string): string[] {
+    // Remove Reddit prefix if present (t1_, t3_, etc.)
+    const cleanParentId = parentId.replace(/^t[0-9]_/, '');
+    return this.tickerContextMap.get(cleanParentId) || [];
+  }
+  
+  /**
+   * Validate a subreddit exists and get metadata
+   */
+  public async validateSubreddit(name: string): Promise<SubredditValidationResult> {
+    // Normalize subreddit name
+    const normalized = this.normalizeSubredditName(name);
+
+    // Check cache first
+    const cached = this.validationCache.get(normalized);
+    if (cached && Date.now() - cached.timestamp < this.VALIDATION_CACHE_TTL) {
+      console.log(`📦 Returning cached validation for r/${normalized}`);
+      return cached.result;
+    }
+
+    console.log(`🔍 Validating subreddit: r/${normalized}`);
+
+    // Check if in development mode
+    const isDev = process.env.SKIP_CONFIG_VALIDATION === 'true' || 
+                 config.reddit.clientId.startsWith('placeholder_');
+    
+    if (isDev) {
+      // Mock validation response in development
+      const result: SubredditValidationResult = {
+        exists: true,
+        isCryptoFocused: this.isCryptoRelated(normalized),
+        description: `Mock description for r/${normalized}`,
+        subscribers: 100000,
+        isPrivate: false,
+        isQuarantined: false,
+        isBanned: false
+      };
+      this.validationCache.set(normalized, { result, timestamp: Date.now() });
+      return result;
+    }
+
+    try {
+      const subreddit = await this.reddit.getSubreddit(normalized);
+      const data = await subreddit.fetch();
+
+      // Check for quarantined/private/banned status
+      const isPrivate = data.subreddit_type === 'private';
+      const isQuarantined = data.quarantine === true;
+      const isBanned = data.subreddit_type === 'banned';
+
+      // Get description for crypto-focus detection
+      const description = data.public_description || data.description || '';
+      const isCryptoFocused = this.isCryptoRelated(normalized + ' ' + description);
+
+      const result: SubredditValidationResult = {
+        exists: true,
+        isCryptoFocused,
+        description: data.public_description || null,
+        subscribers: data.subscribers || null,
+        isPrivate,
+        isQuarantined,
+        isBanned
+      };
+
+      // Cache the result
+      this.validationCache.set(normalized, { result, timestamp: Date.now() });
+
+      console.log(`✅ Validated r/${normalized}: ${result.subscribers?.toLocaleString()} subscribers, crypto: ${isCryptoFocused}`);
+      return result;
+
+    } catch (error: any) {
+      // Handle various error cases
+      const errorMessage = error.message || String(error);
+
+      if (errorMessage.includes('404') || errorMessage.includes('Forbidden')) {
+        const result: SubredditValidationResult = {
+          exists: false,
+          isCryptoFocused: false,
+          description: null,
+          subscribers: null,
+          isPrivate: errorMessage.includes('Forbidden'),
+          isQuarantined: false,
+          isBanned: false
+        };
+
+        // Cache negative results briefly (1 minute)
+        this.validationCache.set(normalized, { result, timestamp: Date.now() - (this.VALIDATION_CACHE_TTL - 60000) });
+
+        return result;
+      }
+
+      // Handle rate limiting
+      if (errorMessage.includes('429') || errorMessage.includes('rate limit')) {
+        console.warn(`⏱️  Rate limited validating r/${normalized}, will retry later`);
+        throw new RedditAPIError('Rate limited, please try again in a moment', { subreddit: normalized });
+      }
+
+      throw new RedditAPIError(`Failed to validate subreddit: ${errorMessage}`, { subreddit: normalized, error });
+    }
+  }
+
+  /**
+   * Add a subreddit to streaming (dynamic addition without restart)
+   */
+  public async addStreamingSubreddit(name: string): Promise<void> {
+    const normalized = this.normalizeSubredditName(name);
+
+    if (this.streamingSubreddits.has(normalized)) {
+      console.log(`⏩ Already streaming r/${normalized}`);
+      return;
+    }
+
+    console.log(`➕ Adding r/${normalized} to streaming`);
+    await this.streamSubreddit(normalized);
+  }
+
+  /**
+   * Remove a subreddit from streaming (dynamic removal without restart)
+   */
+  public removeStreamingSubreddit(name: string): void {
+    const normalized = this.normalizeSubredditName(name);
+
+    if (!this.streamingSubreddits.has(normalized)) {
+      console.log(`⏩ r/${normalized} is not being streamed`);
+      return;
+    }
+
+    console.log(`➖ Removing r/${normalized} from streaming`);
+
+    // Stop the interval
+    const interval = this.streamIntervals.get(normalized);
+    if (interval) {
+      clearInterval(interval);
+      this.streamIntervals.delete(normalized);
+    }
+
+    // Remove from active set
+    this.streamingSubreddits.delete(normalized);
+
+    console.log(`✅ Stopped streaming r/${normalized}`);
+  }
+
+  /**
+   * Normalize subreddit name (remove r/ prefix, lowercase, trim)
+   */
+  private normalizeSubredditName(name: string): string {
+    if (!name || typeof name !== 'string') {
+      return '';
+    }
+
+    let normalized = name.trim();
+    normalized = normalized.replace(/^\/r\/|^r\//i, '');
+    normalized = normalized.toLowerCase();
+
+    return normalized;
+  }
+
+  /**
+   * Check if a subreddit or text is crypto-related
+   */
+  private isCryptoRelated(text: string): boolean {
+    const cryptoKeywords = [
+      'crypto', 'bitcoin', 'btc', 'ethereum', 'eth', 'blockchain',
+      'defi', 'altcoin', 'coin', 'token', 'nft', 'web3', 'trading',
+      'satoshi', 'hodl', 'cryptocurrency'
+    ];
+
+    const lowerText = text.toLowerCase();
+    return cryptoKeywords.some(keyword => lowerText.includes(keyword));
+  }
+
+  /**
+   * Clear ticker context map (useful for memory management)
+   */
+  public clearTickerContext(): void {
+    this.tickerContextMap.clear();
+    console.log('🧹 Cleared ticker context map');
   }
 }
 

@@ -75,6 +75,8 @@ export interface TradePerformance {
 export class DataStorageService {
   private db: Database | null = null;
   private readonly dbPath: string;
+  private suggestionsCache: { data: any[]; timestamp: number } | null = null;
+  private readonly suggestionsCacheTTL = 10 * 60 * 1000; // 10 minutes
 
   constructor() {
     this.dbPath = path.join(process.cwd(), 'data', 'cpto_analysis.db');
@@ -249,6 +251,21 @@ export class DataStorageService {
         ON pending_trades(expires_at);
     `);
 
+    // Managed subreddits configuration
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS managed_subreddits (
+        subreddit TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        added_at INTEGER NOT NULL,
+        last_post_count INTEGER NOT NULL DEFAULT 0,
+        last_checked INTEGER,
+        is_crypto_focused INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_managed_subreddits_enabled 
+        ON managed_subreddits(enabled);
+    `);
+
     console.log('✅ Database tables created/verified');
     
     // Create indexes for performance
@@ -309,6 +326,93 @@ export class DataStorageService {
       `);
       console.log('✅ Added price tracking columns to processed_content table');
     }
+
+    // Migrate subreddits from config to managed_subreddits table
+    await this.migrateSubredditsFromConfig();
+  }
+
+  /**
+   * Migrate subreddits from SUBREDDITS environment variable to managed_subreddits table
+   * This runs once on first initialization
+   */
+  private async migrateSubredditsFromConfig(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Check if managed_subreddits table has any rows
+    const count = await this.db.get('SELECT COUNT(*) as count FROM managed_subreddits');
+    
+    if (count.count > 0) {
+      // Migration already done
+      return;
+    }
+
+    // Import config to get subreddits list
+    const { config } = await import('../config');
+    const subreddits = config.trading.subreddits || [];
+
+    if (subreddits.length === 0) {
+      console.log('⚠️  No subreddits found in config, skipping migration');
+      return;
+    }
+
+    console.log(`🔄 Migrating ${subreddits.length} subreddits from config to database...`);
+
+    // Crypto-focused keywords for heuristic detection
+    const cryptoKeywords = ['crypto', 'btc', 'bitcoin', 'eth', 'ethereum', 'defi', 'blockchain', 'altcoin'];
+
+    await this.db.run('BEGIN TRANSACTION');
+
+    try {
+      const now = Date.now();
+
+      for (const subreddit of subreddits) {
+        // Normalize subreddit name: strip r/ or /r/ prefix, lowercase, trim
+        const normalized = this.normalizeSubredditName(subreddit);
+
+        if (!normalized) {
+          console.warn(`⚠️  Skipping invalid subreddit name: ${subreddit}`);
+          continue;
+        }
+
+        // Check if subreddit name contains crypto keywords (simple heuristic)
+        const lowerName = normalized.toLowerCase();
+        const isCryptoFocused = cryptoKeywords.some(keyword => lowerName.includes(keyword)) ? 1 : 0;
+
+        await this.db.run(`
+          INSERT OR IGNORE INTO managed_subreddits (
+            subreddit, enabled, added_at, last_post_count, last_checked, is_crypto_focused
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `, [normalized, 1, now, 0, null, isCryptoFocused]);
+
+        console.log(`  ✅ Migrated: r/${normalized} (crypto-focused: ${isCryptoFocused ? 'yes' : 'no'})`);
+      }
+
+      await this.db.run('COMMIT');
+      console.log(`✅ Successfully migrated ${subreddits.length} subreddits to database`);
+    } catch (error) {
+      await this.db.run('ROLLBACK');
+      console.error('❌ Failed to migrate subreddits:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Normalize subreddit name: strip r/ or /r/ prefix, lowercase, trim
+   */
+  private normalizeSubredditName(name: string): string {
+    if (!name || typeof name !== 'string') {
+      return '';
+    }
+
+    let normalized = name.trim();
+
+    // Strip r/ or /r/ prefix
+    normalized = normalized.replace(/^\/r\/|^r\//i, '');
+
+    // Lowercase
+    normalized = normalized.toLowerCase();
+
+    return normalized;
   }
 
   /**
@@ -1222,6 +1326,270 @@ export class DataStorageService {
     );
 
     return rows.map(row => row.ticker);
+  }
+
+  // ===================== MANAGED SUBREDDITS METHODS =====================
+
+  /**
+   * Get active (enabled) subreddits for streaming
+   */
+  async getActiveSubreddits(): Promise<string[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT subreddit FROM managed_subreddits WHERE enabled = 1 ORDER BY subreddit'
+    );
+
+    return rows.map(row => row.subreddit);
+  }
+
+  /**
+   * Get all managed subreddits with full details
+   */
+  async getAllManagedSubreddits(): Promise<Array<{
+    subreddit: string;
+    enabled: boolean;
+    added_at: number;
+    last_post_count: number;
+    last_checked: number | null;
+    is_crypto_focused: boolean;
+  }>> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const rows = await this.db.all(
+      'SELECT * FROM managed_subreddits ORDER BY subreddit'
+    );
+
+    return rows.map(row => ({
+      subreddit: row.subreddit,
+      enabled: row.enabled === 1,
+      added_at: row.added_at,
+      last_post_count: row.last_post_count,
+      last_checked: row.last_checked,
+      is_crypto_focused: row.is_crypto_focused === 1
+    }));
+  }
+
+  /**
+   * Add a new subreddit to managed list
+   */
+  async addSubreddit(name: string, isCryptoFocused: boolean = false): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const normalized = this.normalizeSubredditName(name);
+    
+    if (!normalized) {
+      throw new Error('Invalid subreddit name');
+    }
+
+    // Validate name format
+    if (!normalized.match(/^[A-Za-z0-9][A-Za-z0-9_]{2,20}$/)) {
+      throw new Error('Subreddit name must be 3-21 characters, alphanumeric and underscores only');
+    }
+
+    try {
+      await this.db.run(`
+        INSERT INTO managed_subreddits (
+          subreddit, enabled, added_at, last_post_count, last_checked, is_crypto_focused
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `, [normalized, 1, Date.now(), 0, null, isCryptoFocused ? 1 : 0]);
+    } catch (error: any) {
+      if (error.message && error.message.includes('UNIQUE constraint failed')) {
+        throw new Error(`Subreddit r/${normalized} is already being monitored`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a subreddit from managed list
+   */
+  async removeSubreddit(name: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const normalized = this.normalizeSubredditName(name);
+    
+    const result = await this.db.run(
+      'DELETE FROM managed_subreddits WHERE subreddit = ?',
+      [normalized]
+    );
+
+    if (result.changes === 0) {
+      throw new Error(`Subreddit r/${normalized} not found`);
+    }
+  }
+
+  /**
+   * Enable a subreddit for monitoring
+   */
+  async enableSubreddit(name: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const normalized = this.normalizeSubredditName(name);
+    
+    const result = await this.db.run(
+      'UPDATE managed_subreddits SET enabled = 1 WHERE subreddit = ?',
+      [normalized]
+    );
+
+    if (result.changes === 0) {
+      throw new Error(`Subreddit r/${normalized} not found`);
+    }
+  }
+
+  /**
+   * Disable a subreddit from monitoring
+   */
+  async disableSubreddit(name: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const normalized = this.normalizeSubredditName(name);
+    
+    const result = await this.db.run(
+      'UPDATE managed_subreddits SET enabled = 0 WHERE subreddit = ?',
+      [normalized]
+    );
+
+    if (result.changes === 0) {
+      throw new Error(`Subreddit r/${normalized} not found`);
+    }
+  }
+
+  /**
+   * Update subreddit stats after processing
+   */
+  async updateSubredditStats(name: string, postCount: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const normalized = this.normalizeSubredditName(name);
+    
+    await this.db.run(`
+      UPDATE managed_subreddits 
+      SET last_post_count = ?, last_checked = ?
+      WHERE subreddit = ?
+    `, [postCount, Date.now(), normalized]);
+  }
+
+  /**
+   * Get suggested subreddits based on mentions in processed content
+   */
+  async getSuggestedSubreddits(limit: number = 10): Promise<Array<{
+    subreddit: string;
+    mentionCount: number;
+    samplePosts: string[];
+    inferredCryptoFocus: boolean;
+  }>> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Check cache
+    if (this.suggestionsCache && Date.now() - this.suggestionsCache.timestamp < this.suggestionsCacheTTL) {
+      return this.suggestionsCache.data.slice(0, limit);
+    }
+
+    console.log('🔍 Generating subreddit suggestions from processed content...');
+
+    // Get recent content from last 30 days or last 10k items
+    const cutoffTime = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const recentContent = await this.db.all(`
+      SELECT id, subreddit, title, content, processing_timestamp
+      FROM processed_content
+      WHERE processing_timestamp >= ?
+      ORDER BY processing_timestamp DESC
+      LIMIT 10000
+    `, [cutoffTime]);
+
+    if (recentContent.length === 0) {
+      this.suggestionsCache = { data: [], timestamp: Date.now() };
+      return [];
+    }
+
+    // Get already managed subreddits to filter out
+    const managedSubreddits = new Set(await this.getActiveSubreddits());
+    const allManaged = await this.db.all('SELECT subreddit FROM managed_subreddits');
+    allManaged.forEach(row => managedSubreddits.add(row.subreddit));
+
+    // Crypto keywords for filtering
+    const cryptoKeywords = [
+      'bitcoin', 'btc', 'crypto', 'cryptocurrency', 'ethereum', 'eth',
+      'altcoin', 'defi', 'blockchain', 'trading', 'invest', 'finance',
+      'coin', 'token', 'nft', 'web3', 'satoshi', 'hodl'
+    ];
+
+    // Extract subreddit mentions using regex
+    // Pattern: r/SubredditName or /r/SubredditName
+    const mentionPattern = /(?:^|[\s(])(?:r\/|\/r\/)([A-Za-z0-9][A-Za-z0-9_]{2,20})(?=[\s),.\/]|$)/gi;
+    
+    const mentions = new Map<string, { count: number; samples: Set<string>; contexts: string[] }>();
+
+    for (const item of recentContent) {
+      const text = `${item.title || ''} ${item.content || ''}`;
+      const matches = [...text.matchAll(mentionPattern)];
+
+      for (const match of matches) {
+        const subreddit = match[1].toLowerCase();
+        
+        // Skip if already managed or is current subreddit
+        if (managedSubreddits.has(subreddit) || subreddit === item.subreddit.toLowerCase()) {
+          continue;
+        }
+
+        // Extract context around the mention (50 chars before and after)
+        const matchIndex = match.index || 0;
+        const contextStart = Math.max(0, matchIndex - 50);
+        const contextEnd = Math.min(text.length, matchIndex + match[0].length + 50);
+        const context = text.substring(contextStart, contextEnd).trim();
+
+        if (!mentions.has(subreddit)) {
+          mentions.set(subreddit, { count: 0, samples: new Set(), contexts: [] });
+        }
+
+        const entry = mentions.get(subreddit)!;
+        entry.count++;
+        
+        if (item.title && entry.samples.size < 3) {
+          entry.samples.add(item.title);
+        }
+        
+        if (entry.contexts.length < 5) {
+          entry.contexts.push(context);
+        }
+      }
+    }
+
+    // Filter and rank suggestions
+    const suggestions = Array.from(mentions.entries())
+      .map(([subreddit, data]) => {
+        // Check if crypto-focused based on context analysis
+        const allContexts = data.contexts.join(' ').toLowerCase();
+        const inferredCryptoFocus = cryptoKeywords.some(keyword => 
+          allContexts.includes(keyword) || subreddit.includes(keyword)
+        );
+
+        return {
+          subreddit,
+          mentionCount: data.count,
+          samplePosts: Array.from(data.samples).slice(0, 3),
+          inferredCryptoFocus
+        };
+      })
+      // Filter to crypto-focused only
+      .filter(s => s.inferredCryptoFocus)
+      // Sort by mention count descending
+      .sort((a, b) => b.mentionCount - a.mentionCount);
+
+    // Cache the results
+    this.suggestionsCache = { data: suggestions, timestamp: Date.now() };
+
+    console.log(`✅ Found ${suggestions.length} suggested subreddits (showing top ${limit})`);
+
+    return suggestions.slice(0, limit);
+  }
+
+  /**
+   * Invalidate suggestions cache (call when new content is processed)
+   */
+  invalidateSuggestionsCache(): void {
+    this.suggestionsCache = null;
   }
 
   /**

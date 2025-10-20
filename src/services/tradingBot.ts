@@ -441,10 +441,37 @@ export class TradingBot extends EventEmitter {
         console.log(`💾 Using cached tickers for ${item.id}: ${JSON.stringify(tickers)}`);
       }
 
+      // HYBRID TICKER INHERITANCE: Check for inherited tickers from parent
+      if ((!tickers || tickers.length === 0) && 'parent_id' in item && item.parent_id) {
+        // First, try memory-based inheritance (free)
+        const inheritedTickers = redditClient.getInheritedTickers(item.parent_id);
+        
+        if (inheritedTickers.length > 0) {
+          tickers = inheritedTickers;
+          console.log(`📎 Inherited ${tickers.length} tickers from parent ${item.parent_id}: ${tickers.join(', ')}`);
+        }
+        // Second, for high-value orphan comments, fetch parent (selective API cost)
+        else if (content.length > 150 && item.score > 10) {
+          console.log(`🔍 High-value orphan comment (${item.score} upvotes, ${content.length} chars) - checking parent`);
+          const parentComment = await redditClient.getCommentById(item.parent_id);
+          
+          if (parentComment && parentComment.body) {
+            const parentTickers = await aiService.extractCryptoTickers(parentComment.body);
+            if (parentTickers.length > 0) {
+              tickers = parentTickers;
+              console.log(`🎯 Found ${parentTickers.length} tickers in parent: ${parentTickers.join(', ')}`);
+            }
+          }
+        }
+      }
+
       if (!tickers || tickers.length === 0) {
         console.log(`⏭️ No crypto tickers found in ${item.id}, skipping`);
         return; // No crypto mentions found
       }
+      
+      // Store ticker context for future inheritance
+      redditClient.storeTickerContext(item.id, tickers);
 
       // Step 2: Filter tickers to only those supported by Gemini
       const validTickers = await tickerValidationService.validateAndFilterTickers(tickers);
@@ -498,9 +525,51 @@ export class TradingBot extends EventEmitter {
         return;
       }
 
-      // Analyze sentiment
-      const sentiment = await aiService.analyzeSentiment(content, ticker);
-      console.log(`Sentiment for ${ticker}: ${sentiment.score.toFixed(2)} (confidence: ${sentiment.confidence.toFixed(2)})`);
+      // Analyze sentiment (with selective parent context for borderline cases)
+      let sentimentAnalysisText = content;
+      let usedParentContext = false;
+      
+      // For borderline/weak sentiment on comments with parent, include parent context
+      if ('parent_id' in item && item.parent_id) {
+        // Quick initial sentiment check (reuse cache if available)
+        const initialSentiment = await aiService.analyzeSentiment(content, ticker);
+        
+        // If sentiment is weak/borderline and content is substantial, add parent context
+        if (Math.abs(initialSentiment.score) < 0.3 && content.length > 80) {
+          console.log(`⚠️ Borderline sentiment (${initialSentiment.score.toFixed(2)}) - fetching parent for context`);
+          const parentComment = await redditClient.getCommentById(item.parent_id);
+          
+          if (parentComment && parentComment.body) {
+            sentimentAnalysisText = `Parent context: ${parentComment.body}\n\nReply: ${content}`;
+            usedParentContext = true;
+            console.log(`📝 Added parent context for clearer sentiment analysis`);
+          }
+        } else {
+          // Use the initial sentiment if it's strong enough (avoid double analysis)
+          console.log(`Sentiment for ${ticker}: ${initialSentiment.score.toFixed(2)} (confidence: ${initialSentiment.confidence.toFixed(2)})`);
+        }
+      }
+      
+      // Analyze sentiment with potentially enriched context
+      let sentiment = usedParentContext ? 
+        await aiService.analyzeSentiment(sentimentAnalysisText, ticker) :
+        await aiService.analyzeSentiment(content, ticker);
+      
+      console.log(`Sentiment for ${ticker}: ${sentiment.score.toFixed(2)} (confidence: ${sentiment.confidence.toFixed(2)})${usedParentContext ? ' [with parent context]' : ''}`);
+      
+      // UPVOTE WEIGHTING: Adjust sentiment based on community validation
+      const upvotes = item.score || 0;
+      if (upvotes > 5) {
+        // Use logarithmic scaling to avoid over-weighting viral content
+        // Score of 10 upvotes -> 1.04x multiplier
+        // Score of 100 upvotes -> 1.10x multiplier
+        // Score of 1000 upvotes -> 1.15x multiplier
+        const upvoteMultiplier = 1 + (Math.log10(upvotes) * 0.05);
+        const originalScore = sentiment.score;
+        sentiment.score = Math.max(-1, Math.min(1, sentiment.score * upvoteMultiplier));
+        
+        console.log(`👍 Upvote-weighted sentiment: ${originalScore.toFixed(3)} -> ${sentiment.score.toFixed(3)} (${upvotes} upvotes, ${upvoteMultiplier.toFixed(2)}x)`);
+      }
 
       // Get market data from Gemini
       const marketData = await this.getMarketData(ticker);

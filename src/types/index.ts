@@ -365,3 +365,30 @@ export interface SentimentPriceCorrelationOptions {
   interval: 'hourly' | 'daily';
   baseCurrency: 'USD' | 'BTC';
 }
+
+// Subreddit Management types
+export interface ManagedSubreddit {
+  subreddit: string;
+  enabled: boolean;
+  added_at: number;
+  last_post_count: number;
+  last_checked: number | null;
+  is_crypto_focused: boolean;
+}
+
+export interface SubredditSuggestion {
+  subreddit: string;
+  mentionCount: number;
+  samplePosts: string[];
+  inferredCryptoFocus: boolean;
+}
+
+export interface SubredditValidationResult {
+  exists: boolean;
+  isCryptoFocused: boolean;
+  description: string | null;
+  subscribers: number | null;
+  isPrivate?: boolean;
+  isQuarantined?: boolean;
+  isBanned?: boolean;
+}
