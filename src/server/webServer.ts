@@ -1419,6 +1419,263 @@ export class WebServer {
         return res.status(500).json({ error: errorMessage });
       }
     });
+    
+    // ================ SUBREDDIT MANAGEMENT ENDPOINTS ================
+    
+    // Get all managed subreddits
+    this.app.get('/api/subreddits', async (_req, res) => {
+      try {
+        const subreddits = await dataStorageService.getAllManagedSubreddits();
+        
+        return res.json({
+          success: true,
+          subreddits,
+          count: subreddits.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error fetching subreddits:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Validate a subreddit
+    this.app.post('/api/subreddits/validate/:subreddit', async (req, res) => {
+      try {
+        const { subreddit } = req.params;
+        
+        // Validate format
+        if (!subreddit || !subreddit.match(/^[A-Za-z0-9][A-Za-z0-9_]{2,20}$/)) {
+          return res.status(400).json({ 
+            error: 'Invalid subreddit name. Must be 3-21 characters, alphanumeric and underscores only' 
+          });
+        }
+        
+        const validation = await redditClient.validateSubreddit(subreddit);
+        
+        return res.json({
+          success: true,
+          validation,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        console.error('Error validating subreddit:', error);
+        
+        // Handle rate limiting
+        if (error.message && error.message.includes('Rate limited')) {
+          return res.status(429).json({ 
+            error: error.message,
+            retryAfter: 60 
+          });
+        }
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Add a new subreddit
+    this.app.post('/api/subreddits/add', async (req, res) => {
+      try {
+        const { subreddit } = req.body;
+        
+        if (!subreddit || typeof subreddit !== 'string') {
+          return res.status(400).json({ error: 'subreddit field is required' });
+        }
+        
+        // Validate and add to database
+        const validation = await redditClient.validateSubreddit(subreddit);
+        
+        if (!validation.exists) {
+          return res.status(404).json({ 
+            error: `Subreddit r/${subreddit} does not exist or is not accessible`,
+            validation
+          });
+        }
+        
+        if (validation.isPrivate || validation.isBanned) {
+          return res.status(400).json({ 
+            error: `Subreddit r/${subreddit} is ${validation.isPrivate ? 'private' : 'banned'} and cannot be monitored`,
+            validation
+          });
+        }
+        
+        // Add to database
+        await dataStorageService.addSubreddit(subreddit, validation.isCryptoFocused);
+        
+        // Get the added subreddit
+        const allSubreddits = await dataStorageService.getAllManagedSubreddits();
+        const addedSubreddit = allSubreddits.find(s => s.subreddit.toLowerCase() === subreddit.toLowerCase());
+        
+        // Emit event to start streaming
+        tradingBot.emit('subredditAdded', { 
+          subreddit: subreddit.toLowerCase(), 
+          timestamp: Date.now() 
+        });
+        
+        // Broadcast to all connected clients
+        this.io.emit('subredditAdded', addedSubreddit);
+        
+        return res.json({
+          success: true,
+          message: `Successfully added r/${subreddit}`,
+          subreddit: addedSubreddit,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        console.error('Error adding subreddit:', error);
+        
+        // Handle duplicate
+        if (error.message && error.message.includes('already being monitored')) {
+          return res.status(409).json({ error: error.message });
+        }
+        
+        // Handle rate limiting
+        if (error.message && error.message.includes('Rate limited')) {
+          return res.status(429).json({ 
+            error: error.message,
+            retryAfter: 60 
+          });
+        }
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Enable a subreddit
+    this.app.post('/api/subreddits/enable/:subreddit', async (req, res) => {
+      try {
+        const { subreddit } = req.params;
+        
+        await dataStorageService.enableSubreddit(subreddit);
+        
+        // Emit event to start streaming
+        tradingBot.emit('subredditEnabled', { 
+          subreddit: subreddit.toLowerCase(), 
+          timestamp: Date.now() 
+        });
+        
+        // Get updated data
+        const allSubreddits = await dataStorageService.getAllManagedSubreddits();
+        const enabledSubreddit = allSubreddits.find(s => s.subreddit.toLowerCase() === subreddit.toLowerCase());
+        
+        // Broadcast to all connected clients
+        this.io.emit('subredditEnabled', enabledSubreddit);
+        
+        return res.json({
+          success: true,
+          message: `Enabled r/${subreddit}`,
+          subreddit: enabledSubreddit,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        console.error('Error enabling subreddit:', error);
+        
+        if (error.message && error.message.includes('not found')) {
+          return res.status(404).json({ error: error.message });
+        }
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Disable a subreddit
+    this.app.post('/api/subreddits/disable/:subreddit', async (req, res) => {
+      try {
+        const { subreddit } = req.params;
+        
+        await dataStorageService.disableSubreddit(subreddit);
+        
+        // Emit event to stop streaming
+        tradingBot.emit('subredditDisabled', { 
+          subreddit: subreddit.toLowerCase(), 
+          timestamp: Date.now() 
+        });
+        
+        // Get updated data
+        const allSubreddits = await dataStorageService.getAllManagedSubreddits();
+        const disabledSubreddit = allSubreddits.find(s => s.subreddit.toLowerCase() === subreddit.toLowerCase());
+        
+        // Broadcast to all connected clients
+        this.io.emit('subredditDisabled', disabledSubreddit);
+        
+        return res.json({
+          success: true,
+          message: `Disabled r/${subreddit}`,
+          subreddit: disabledSubreddit,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        console.error('Error disabling subreddit:', error);
+        
+        if (error.message && error.message.includes('not found')) {
+          return res.status(404).json({ error: error.message });
+        }
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Remove a subreddit
+    this.app.delete('/api/subreddits/remove/:subreddit', async (req, res) => {
+      try {
+        const { subreddit } = req.params;
+        
+        await dataStorageService.removeSubreddit(subreddit);
+        
+        // Emit event to stop streaming
+        tradingBot.emit('subredditRemoved', { 
+          subreddit: subreddit.toLowerCase(), 
+          timestamp: Date.now() 
+        });
+        
+        // Broadcast to all connected clients
+        this.io.emit('subredditRemoved', { subreddit: subreddit.toLowerCase() });
+        
+        return res.json({
+          success: true,
+          message: `Removed r/${subreddit}`,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        console.error('Error removing subreddit:', error);
+        
+        if (error.message && error.message.includes('not found')) {
+          return res.status(404).json({ error: error.message });
+        }
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
+    
+    // Get suggested subreddits
+    this.app.get('/api/subreddits/suggestions', async (req, res) => {
+      try {
+        const limit = parseInt(req.query.limit as string) || 10;
+        
+        if (limit < 1 || limit > 50) {
+          return res.status(400).json({ error: 'Limit must be between 1 and 50' });
+        }
+        
+        const suggestions = await dataStorageService.getSuggestedSubreddits(limit);
+        
+        return res.json({
+          success: true,
+          suggestions,
+          count: suggestions.length,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error getting suggestions:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: errorMessage });
+      }
+    });
   }
 
   /**

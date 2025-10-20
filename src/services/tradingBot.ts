@@ -198,6 +198,27 @@ export class TradingBot extends EventEmitter {
       this.recordError('reddit_stream', error);
       this.emit('processingError', error);
     });
+
+    // Listen for subreddit management events to control streaming
+    this.on('subredditAdded', async (data: { subreddit: string; timestamp: number }) => {
+      console.log(`➕ Subreddit added event: r/${data.subreddit}`);
+      await redditClient.addStreamingSubreddit(data.subreddit);
+    });
+
+    this.on('subredditEnabled', async (data: { subreddit: string; timestamp: number }) => {
+      console.log(`✅ Subreddit enabled event: r/${data.subreddit}`);
+      await redditClient.addStreamingSubreddit(data.subreddit);
+    });
+
+    this.on('subredditDisabled', (data: { subreddit: string; timestamp: number }) => {
+      console.log(`⏸️  Subreddit disabled event: r/${data.subreddit}`);
+      redditClient.removeStreamingSubreddit(data.subreddit);
+    });
+
+    this.on('subredditRemoved', (data: { subreddit: string; timestamp: number }) => {
+      console.log(`🗑️  Subreddit removed event: r/${data.subreddit}`);
+      redditClient.removeStreamingSubreddit(data.subreddit);
+    });
   }
 
   /**
@@ -379,6 +400,14 @@ export class TradingBot extends EventEmitter {
       this.stats.totalItemsProcessed++;
       this.stats.lastProcessedTime = Date.now();
       console.log(`✅ Successfully processed ${id}. Total processed: ${this.stats.totalItemsProcessed}`);
+      
+      // Update subreddit stats in database (track post count per subreddit)
+      try {
+        await dataStorageService.updateSubredditStats(item.subreddit, this.stats.totalItemsProcessed);
+      } catch (statsError) {
+        // Don't fail processing if stats update fails
+        console.warn(`Failed to update subreddit stats for r/${item.subreddit}:`, statsError);
+      }
       
     } catch (error) {
       console.error(`❌ Failed to process item ${id}:`, error);
@@ -887,7 +916,22 @@ export class TradingBot extends EventEmitter {
     let totalItemsQueued = 0;
     
     try {
-      for (const subreddit of config.trading.subreddits) {
+      // Load active subreddits from database
+      let subreddits: string[];
+      try {
+        subreddits = await dataStorageService.getActiveSubreddits();
+        if (subreddits.length === 0) {
+          console.warn('⚠️  No active subreddits in database, falling back to config');
+          subreddits = config.trading.subreddits;
+        } else {
+          console.log(`📊 Processing history for ${subreddits.length} active subreddits from database`);
+        }
+      } catch (dbError) {
+        console.warn('Failed to load subreddits from database, using config:', dbError);
+        subreddits = config.trading.subreddits;
+      }
+      
+      for (const subreddit of subreddits) {
         console.log(`🔍 Fetching recent posts from r/${subreddit}...`);
         
         try {
@@ -926,7 +970,7 @@ export class TradingBot extends EventEmitter {
           }
           
           // Add a small delay between subreddits to respect rate limits
-          if (subreddit !== config.trading.subreddits[config.trading.subreddits.length - 1]) {
+          if (subreddit !== subreddits[subreddits.length - 1]) {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
           
@@ -941,7 +985,7 @@ export class TradingBot extends EventEmitter {
         this.emit('historyProcessed', {
           itemsFound: totalItemsFound,
           itemsQueued: totalItemsQueued,
-          subreddits: config.trading.subreddits
+          subreddits: subreddits
         });
       } else {
         console.log('💭 No recent Reddit activity found in the last hour');
